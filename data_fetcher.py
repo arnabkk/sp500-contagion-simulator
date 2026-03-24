@@ -37,6 +37,7 @@ def generate_json(sp500_dict: dict, filename: str) -> None:
         interval="1d",
         auto_adjust=True
     )["Close"]
+    yf_ticker_info = yf.Tickers(" ".join(tickers_hyphenated))
     result = {
         "METADATA": {
             "Last Updated": datetime.now().strftime("%Y-%m-%d"),
@@ -47,6 +48,7 @@ def generate_json(sp500_dict: dict, filename: str) -> None:
     for ticker, details in sp500_dict.items():
         ticker_hyphenated = ticker.replace(".", "-")
         if ticker_hyphenated in data.columns:
+            market_cap = getattr(yf_ticker_info.tickers[ticker_hyphenated].info, "marketCap", 0)
             historical_data = data[ticker_hyphenated].dropna()
             historical_data_dict = {date.strftime("%Y-%m-%d"): round(float(price), 4)
                                     for date, price in historical_data.items()}
@@ -57,7 +59,8 @@ def generate_json(sp500_dict: dict, filename: str) -> None:
                 "sub_industry": details.get('GICS Sub-Industry'),
                 "hq_location": details.get('Headquarters Location'),
                 "founded": int(clean_year_founded),
-                "history": historical_data_dict
+                "history": historical_data_dict,
+                "market_cap": round(float(market_cap), 2)
             }
     with open(filename, 'w') as f:
         json.dump(result, f, indent=4)
@@ -65,4 +68,4 @@ def generate_json(sp500_dict: dict, filename: str) -> None:
 
 if __name__ == "__main__":
     stocks_metadata = get_sp500_stocks()
-    generate_json(stocks_metadata, "sp500_data.json")
+    generate_json(stocks_metadata, "sp500_covid_data.json")
