@@ -48,6 +48,23 @@ class Company:
         self.crash_percentage = 0.0
         self.neighbors = {}
 
+    def crash_company(self, crash_percentage: float) -> None:
+        """Recursively revaluate company value based off of effects of crash.
+
+        Preconditions:
+            - 0 < crash_percentage <= 1
+        """
+        if self.crash_percentage != 0:
+            self.crash_percentage *= self.crash_percentage * crash_percentage
+        else:
+            self.crash_percentage = crash_percentage
+        for company in self.neighbors:
+            wave_crash = crash_percentage * self.neighbors[company]
+            if wave_crash <= 0.01:
+                return
+            else:
+                company.crash_company(wave_crash)
+
 
 class MarketNetwork:
     """ A graph-based model of the S&P 500 market network.
@@ -86,6 +103,16 @@ class MarketNetwork:
         company2 = self.companies[ticker2]
         company1.neighbors[company2] = weight
         company2.neighbors[company1] = weight
+
+    def simulate_crash(self, crash_ticker: str, crash_percentage: float) -> None:
+        """Simulate a crash of a company in the MarketNetwork and its effects on other companies within the network.
+
+        Preconditions:
+            - crash_ticker in self.companies
+            - 0 < crash_percentage <= 1
+        """
+        crash_company_vertex = self.companies[crash_ticker]
+        crash_company_vertex.crash_company(crash_percentage)
 
 
 def construct_market_network(json_file: str, strength_value: float = 0.7) -> MarketNetwork:
