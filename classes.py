@@ -14,7 +14,7 @@ class Company:
         - sub_industry: The GICS Sub-Industry classification (e.g., "Industrial Conglomerates").
         - founded: The year the company was founded.
         - history: A mapping from dates "YYYY-MM-DD" to adjusted closing prices.
-        - status: The current simulation state ("Stable" or "Crashed").
+        - crashed: Boolean value for whether the company is crashed
         - crash_percentage: A float from 0.0 to 1.0 representing "by how much" the stock has crashed.
         - neighbors: A mapping from neighboring Company objects to their edge weight \
                      (Pearson correlation coefficient r).
@@ -31,7 +31,7 @@ class Company:
     sub_industry: str
     founded: str
     history: dict[str, float]
-    status: str
+    crashed: bool
     crash_percentage: float
     neighbors: dict[Company, float]
 
@@ -44,7 +44,7 @@ class Company:
         self.sub_industry = data.get("sub_industry")
         self.founded = data.get("founded")
         self.history = data.get("history", {})
-        self.status = "Stable"
+        self.crashed = False
         self.crash_percentage = 0.0
         self.neighbors = {}
 
@@ -54,15 +54,11 @@ class Company:
         Preconditions:
             - 0 < crash_percentage <= 1
         """
-        if self.crash_percentage != 0:
-            self.crash_percentage *= self.crash_percentage * crash_percentage
-        else:
-            self.crash_percentage = crash_percentage
+        self.crashed = True
+        self.crash_percentage = crash_percentage
         for company in self.neighbors:
             wave_crash = crash_percentage * self.neighbors[company]
-            if wave_crash <= 0.01:
-                return
-            else:
+            if wave_crash > 0.01 and not company.crashed:
                 company.crash_company(wave_crash)
 
 
@@ -113,6 +109,11 @@ class MarketNetwork:
         """
         crash_company_vertex = self.companies[crash_ticker]
         crash_company_vertex.crash_company(crash_percentage)
+
+    def reset_market(self) -> None:
+        for company in self.companies.values():
+            company.crashed = False
+            company.crash_percentage = 0.0
 
 
 def construct_market_network(json_file: str, strength_value: float = 0.7) -> MarketNetwork:
