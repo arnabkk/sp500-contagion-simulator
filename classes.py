@@ -33,6 +33,7 @@ class Company:
     history: dict[str, float]
     crashed: bool
     crash_percentage: float
+    market_cap: float
     neighbors: dict[Company, float]
 
     def __init__(self, ticker, data):
@@ -46,6 +47,7 @@ class Company:
         self.history = data.get("history", {})
         self.crashed = False
         self.crash_percentage = 0.0
+        self.market_cap = data.get("market_cap")
         self.neighbors = {}
 
     def crash_company(self, crash_percentage: float) -> None:
@@ -56,6 +58,7 @@ class Company:
         """
         self.crashed = True
         self.crash_percentage = crash_percentage
+        self.market_cap *= crash_percentage
         for company in self.neighbors:
             wave_crash = crash_percentage * self.neighbors[company]
             if wave_crash > 0.01 and not company.crashed:
