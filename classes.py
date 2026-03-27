@@ -103,20 +103,33 @@ class MarketNetwork:
         company1.neighbors[company2] = weight
         company2.neighbors[company1] = weight
 
-    def simulate_crash(self, crash_ticker: str, crash_percentage: float) -> None:
+    def simulate_crash(self, crash_ticker: str, crash_percentage: float) -> dict[str, float]:
         """Simulate a crash of a company in the MarketNetwork and its effects on other companies within the network.
 
         Preconditions:
             - crash_ticker in self.companies
             - 0 < crash_percentage <= 1
         """
+        pre_crash_dict = {}
+        post_crash_dict = {}
+        affected_dict = {}
+        for company in self.companies:
+            pre_crash_dict[company] = self.companies[company].market_cap
         crash_company_vertex = self.companies[crash_ticker]
         crash_company_vertex.crash_company(crash_percentage)
+        for company in self.companies:
+            post_crash_dict[company] = self.companies[company].market_cap
+        for company in self.companies:
+            if pre_crash_dict[company] != post_crash_dict[company]:
+                affected_dict[company] = post_crash_dict[company]/pre_crash_dict[company]
+        return affected_dict
 
-    def reset_market(self) -> None:
-        for company in self.companies.values():
-            company.crashed = False
-            company.crash_percentage = 0.0
+    def reset_market(self, affected_dict: dict[str, int]) -> None:
+        for company in affected_dict:
+            self.companies[company].crashed = False
+            self.companies[company].crash_percentage = 0.0
+            self.companies[company].market_cap /= affected_dict[company]
+
 
 
 def construct_market_network(json_file: str, strength_value: float = 0.7) -> MarketNetwork:
