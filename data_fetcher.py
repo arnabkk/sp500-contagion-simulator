@@ -3,9 +3,7 @@ import pandas as pd
 import json
 from datetime import datetime
 import urllib.request
-
-from pandas.core.interchange.dataframe_protocol import DataFrame
-
+import time
 
 # source: https://joetatusko.com/2024/05/07/getting-the-sp-500-from-wikipedia-with-python/
 
@@ -48,7 +46,12 @@ def generate_json(sp500_dict: dict, filename: str) -> None:
     for ticker, details in sp500_dict.items():
         ticker_hyphenated = ticker.replace(".", "-")
         if ticker_hyphenated in data.columns:
-            market_cap = getattr(yf_ticker_info.tickers[ticker_hyphenated].info, "marketCap", 0)
+            yf_ticker = yf_ticker_info.tickers[ticker_hyphenated]
+            info = yf_ticker.info
+            if not info or "marketCap" not in info:
+                time.sleep(0.1)
+                info = yf.Ticker(ticker_hyphenated).info
+            market_cap = info.get("marketCap", 0.0)
             historical_data = data[ticker_hyphenated].dropna()
             historical_data_dict = {date.strftime("%Y-%m-%d"): round(float(price), 4)
                                     for date, price in historical_data.items()}
