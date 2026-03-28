@@ -58,7 +58,7 @@ class Company:
         """
         self.crashed = True
         self.crash_percentage = crash_percentage
-        self.market_cap *= crash_percentage
+        self.market_cap *= 1 - crash_percentage
         for company in self.neighbors:
             wave_crash = crash_percentage * self.neighbors[company]
             if wave_crash > 0.01 and not company.crashed:
@@ -104,7 +104,8 @@ class MarketNetwork:
         company2.neighbors[company1] = weight
 
     def simulate_crash(self, crash_ticker: str, crash_percentage: float) -> dict[str, float]:
-        """Simulate a crash of a company in the MarketNetwork and its effects on other companies within the network.
+        """Simulate a crash of a company in the MarketNetwork by mutating self and its effects on other companies within
+         the network.
 
         Preconditions:
             - crash_ticker in self.companies
@@ -119,17 +120,21 @@ class MarketNetwork:
         crash_company_vertex.crash_company(crash_percentage)
         for company in self.companies:
             post_crash_dict[company] = self.companies[company].market_cap
-        for company in self.companies:
             if pre_crash_dict[company] != post_crash_dict[company]:
                 affected_dict[company] = post_crash_dict[company]/pre_crash_dict[company]
         return affected_dict
 
-    def reset_market(self, affected_dict: dict[str, int]) -> None:
+    def reset_market(self, affected_dict: dict[str, float]) -> None:
+        """Reset self by mutating based off inputted dictionary.
+
+        Preconditions:
+            - all([ticker in self.companies for ticker in affected_dict])
+            - all([0 < percentage <= 1 for percentage in affected_dict.values()])
+        """
         for company in affected_dict:
             self.companies[company].crashed = False
             self.companies[company].crash_percentage = 0.0
             self.companies[company].market_cap /= affected_dict[company]
-
 
 
 def construct_market_network(json_file: str, strength_value: float = 0.7) -> MarketNetwork:
@@ -156,19 +161,19 @@ def construct_market_network(json_file: str, strength_value: float = 0.7) -> Mar
             returns[ticker] = np.diff(np.log(np.array(prices)))
     for i in range(len(tickers)):
         for j in range(i + 1, len(tickers)):
-            t1, t2 = tickers[i], tickers[j]
-            if t1 in returns and t2 in returns:
-                r1, r2 = returns[t1], returns[t2]
-                length = min(len(r1), len(r2))
+            ticker1, ticker2 = tickers[i], tickers[j]
+            if ticker1 in returns and ticker2 in returns:
+                return1, return2 = returns[ticker1], returns[ticker2]
+                length = min(len(return1), len(return2))
                 if length > 20:
-                    res = np.corrcoef(r1[:length], r2[:length])[0, 1]
+                    res = np.corrcoef(return1[:length], return2[:length])[0, 1]
                     if res >= strength_value:
-                        network.add_edge(t1, t2, round(float(res), 4))
+                        network.add_edge(ticker1, ticker2, round(float(res), 4))
     return network
 
 
 if __name__ == "__main__":
-    DATA_FILE = "sp500_data.json"
+    DATA_FILE = "sp500_covid_data.json"
     strength_value = 0.7
     my_network = construct_market_network(DATA_FILE, strength_value)
     total_companies = len(my_network.companies)
