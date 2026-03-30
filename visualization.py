@@ -149,13 +149,24 @@ def _build_baseline_figure(network: MarketNetwork,
         text=hover_texts, hovertemplate='%{text}<extra></extra>', showlegend=False
     ), row=1, col=1)
 
-    # Placeholder bar
+    # Empty placeholder for bar chart area
     fig.add_trace(go.Bar(
-        x=[0], y=['Simulate a crash to see results'],
-        orientation='h', marker=dict(color='rgba(100,120,160,0.3)'), showlegend=False
+        x=[], y=[],
+        orientation='h', showlegend=False
     ), row=1, col=2)
 
     _style_figure(fig, 'S&P 500 Network — Sector View')
+
+    # Centered message in the bar chart area
+    fig.add_annotation(
+        text='Simulate a crash to see results',
+        xref='x2', yref='y2',
+        x=0.5, y=0.5,
+        xanchor='center', yanchor='middle',
+        showarrow=False,
+        font=dict(size=14, color=TEXT_SECONDARY),
+    )
+
     return fig
 
 
@@ -543,8 +554,10 @@ def run_visualization(json_file: str, strength_value: float = 0.7) -> None:
                           'marginBottom': '12px'}),
                 html.Div(style={'marginTop': '16px'}, children=[
                     html.Span('Data Source: ', style={'color': TEXT_SECONDARY, 'fontSize': '12px'}),
-                    html.Span('Yahoo Finance (yfinance)', style={
-                        'color': TEXT_PRIMARY, 'fontSize': '12px', 'fontWeight': '600'}),
+                    html.A('Yahoo Finance (yfinance)', href='https://pypi.org/project/yfinance/',
+                           target='_blank', style={
+                            'color': '#4C78A8', 'fontSize': '12px', 'fontWeight': '600',
+                            'textDecoration': 'none'}),
                 ]),
             ]),
 
@@ -640,12 +653,20 @@ def run_visualization(json_file: str, strength_value: float = 0.7) -> None:
             patched['layout']['annotations'] = []
             return patched, '', '', ''
 
-        # If triggered by clicking the graph (bar chart), extract ticker from click
+        # If triggered by clicking the graph (bar or node), extract ticker from click
         if triggered == 'crash-graph' and click_data:
             point = click_data.get('points', [{}])[0]
+            clicked_ticker = ''
             # Bar chart clicks have 'y' as the ticker label
-            clicked_ticker = point.get('y', '')
-            if clicked_ticker and clicked_ticker in network.companies:
+            if point.get('y', '') in network.companies:
+                clicked_ticker = point['y']
+            # Node clicks have ticker in the hover text as <b>TICKER</b>
+            elif 'text' in point:
+                import re
+                match = re.search(r'<b>(\w+)</b>', point['text'])
+                if match and match.group(1) in network.companies:
+                    clicked_ticker = match.group(1)
+            if clicked_ticker:
                 query = clicked_ticker.upper()
             else:
                 return no_update, no_update, no_update, no_update
@@ -748,6 +769,11 @@ def run_visualization(json_file: str, strength_value: float = 0.7) -> None:
                     html.Span('Market Cap: ', style={'color': TEXT_SECONDARY, 'fontSize': '12px'}),
                     html.Span(_format_money(company.market_cap), style={
                         'color': ACCENT_GREEN, 'fontSize': '12px', 'fontWeight': '700'}),
+                ]),
+                html.Div([
+                    html.Span('HQ: ', style={'color': TEXT_SECONDARY, 'fontSize': '12px'}),
+                    html.Span(company.hq_location or 'N/A', style={
+                        'color': TEXT_PRIMARY, 'fontSize': '12px', 'fontWeight': '600'}),
                 ]),
                 html.Div([
                     html.Span('Founded: ', style={'color': TEXT_SECONDARY, 'fontSize': '12px'}),
