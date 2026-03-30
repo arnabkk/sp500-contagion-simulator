@@ -9,74 +9,94 @@
 
 When a major company crashes, the effects rarely stay contained. Shared supply chains, sector dependencies, and investor sentiment can trigger a domino effect of losses across the entire market -- a phenomenon known as **financial contagion**.
 
-This project models the S&P 500 as a **directed, weighted graph** where each node represents a company and each edge reflects a correlation in historical price movements during market downturns. Users can select any company to initiate a simulated crash and watch in real time as the shock propagates through the network.
+This project models the S&P 500 as a **weighted graph** where each node represents a company and each edge reflects a correlation in historical price movements during the COVID-19 market downturn (January--August 2020). Users can select any company to initiate a simulated crash and observe in real time how the shock propagates through the network.
 
 **Research Question:** If one company crashes, how does the shock propagate through the S&P 500 network, and which companies are most vulnerable?
 
 ## Features
 
-- **Real market data** pulled via `yfinance`, covering the 2008 Financial Crisis and the 2020 COVID-19 Crash
-- **Probabilistic contagion model** where crash spread probability is weighted by historical correlation strength
-- **Centrality analysis** (degree, betweenness, eigenvector) to identify systemically important companies
-- **Interactive visualization** with a dynamic network map and synchronized centrality bar chart
-- Adjustable contagion probability scaling and company selection
+- **Real market data** pulled via `yfinance`, covering the 2020 COVID-19 crash period
+- **Deterministic contagion model** where crash impact propagates recursively through correlated companies
+- **Interactive web dashboard** built with Dash and Plotly featuring:
+  - Crash simulation with user-defined ticker and crash severity
+  - Network graph with 503 companies and ~24,000 correlation edges
+  - Bar chart of the most affected companies showing both percentage and monetary loss
+  - Live stats (companies affected, total market loss, post-crash market cap)
+  - Company search with graph highlighting and detailed info card
+  - Clickable bar chart entries that auto-populate the search
 
 ## How It Works
 
 ### Graph Construction
 
-Each S&P 500 company is a `Vertex` in a `Graph`. Edges are created between two companies if:
-
-- Their Pearson correlation coefficient satisfies **r > 0.7**, OR
-- They experience simultaneous negative returns on more than **30% of trading days** during a crash period
+Each S&P 500 company is a `Company` vertex in a `MarketNetwork` graph. Edges are created between two companies if their **Pearson correlation coefficient satisfies r >= 0.7**, computed on log-returns of daily adjusted closing prices.
 
 Edges are weighted by correlation strength -- higher weight means stronger co-movement.
 
 ### Contagion Simulation
 
-Starting from a user-selected company, the simulation performs a graph traversal with probabilistic spreading:
+Starting from a user-selected company with a given crash percentage, the simulation performs a recursive graph traversal:
 
-1. For each neighboring vertex, generate a random value `r` in `[0, 1]`
-2. If `r < edge_weight`, the crash spreads to that neighbor
-3. Affected companies are tracked in a visited set representing the spread over time
+1. The selected company's market cap is reduced by the crash percentage
+2. For each correlated neighbor, the crash impact is attenuated by the edge weight (crash % x correlation)
+3. If the attenuated impact exceeds 1%, the crash spreads to that neighbor
+4. The process continues recursively until the impact dissipates below the threshold
 
 ### Visualization
 
 - **Green nodes** = stable companies
-- **Red nodes** = affected companies
-- Nodes gradually turn red as contagion spreads
-- A bar chart updates alongside the network, ranking companies by centrality
+- **Red nodes** = affected companies (darker red = more severe loss)
+- **Star marker** = the initially crashed company
+- A bar chart shows the top 15 most affected companies with both % loss and dollar loss
+- Company search highlights nodes on the graph and shows detailed company information
 
 ## Tech Stack
 
 - **Python** (core language)
-- **yfinance** -- real-time and historical stock data retrieval
-- **NetworkX** -- graph construction and centrality computation
-- **Plotly / Pygame** -- interactive visualization and simulation display
+- **yfinance** -- historical stock data retrieval
+- **NetworkX** -- graph construction and layout computation
+- **Plotly / Dash** -- interactive web-based visualization and dashboard
+- **NumPy** -- log-return and Pearson correlation computation
 
 ## Data
 
-The project analyzes two major crash periods:
+The project analyzes the COVID-19 crash period:
 
 | Crisis | Date Range |
 |---|---|
-| 2008 Financial Crisis | September 2008 -- March 2009 |
-| COVID-19 Crash | February 2020 -- April 2020 |
+| COVID-19 Crash | January 2020 -- August 2020 |
 
-Sample data record:
-```
-{'Date': '2008-09-15', 'Ticker': 'AAPL', 'Sector': 'Technology', 'Close': 4.96}
-```
+Data includes 503 S&P 500 companies with ~158 trading days of adjusted closing prices, market capitalization, sector, sub-industry, and founding year.
 
 ## Getting Started
 
 ```bash
 # Install dependencies
-pip install yfinance networkx plotly pygame
+pip install -r requirements.txt
 
 # Run the simulation
 python main.py
 ```
+
+The app launches at `http://127.0.0.1:8050`. Open it in your browser.
+
+**How to use:**
+1. Enter a ticker symbol (e.g. `AAPL`) and crash percentage (e.g. `50`)
+2. Click **Simulate Crash** to see contagion spread through the network
+3. Click any bar in the chart to view that company's details
+4. Use **Search Company** to find and highlight any company on the graph
+5. Click **Reset** to return to the baseline sector view
+
+## Project Structure
+
+| File | Description |
+|---|---|
+| `main.py` | Entry point -- builds network and launches dashboard |
+| `classes.py` | Core graph model (`Company`, `MarketNetwork`, crash simulation) |
+| `visualization.py` | Dash app, Plotly figures, and all UI components |
+| `data_fetcher.py` | Scrapes S&P 500 data from Wikipedia and yfinance |
+| `sp500_covid_data.json` | Pre-fetched dataset (503 companies, COVID-19 period) |
+| `requirements.txt` | Python dependencies |
 
 ## References
 
