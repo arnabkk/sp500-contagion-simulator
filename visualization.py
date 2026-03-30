@@ -19,7 +19,7 @@ import networkx as nx
 import numpy as np
 import plotly.graph_objs as go
 from plotly.subplots import make_subplots
-from dash import Dash, html, dcc, Input, Output, State, no_update
+from dash import Dash, html, dcc, Input, Output, State, no_update, Patch
 
 from classes import MarketNetwork, construct_market_network
 
@@ -346,7 +346,7 @@ def run_visualization(json_file: str, strength_value: float = 0.7) -> None:
     total_market_cap = sum(original_caps.values())
 
     # Build Dash app
-    app = Dash(__name__)
+    app = Dash(__name__, title='S&P 500 Market Crash Simulator')
 
     app.layout = html.Div(style={
         'fontFamily': "'Inter', 'Segoe UI', Arial, sans-serif",
@@ -430,6 +430,52 @@ def run_visualization(json_file: str, strength_value: float = 0.7) -> None:
                 }),
             ]),
 
+            # Search row
+            html.Div(style={
+                'display': 'flex', 'alignItems': 'flex-start', 'gap': '14px',
+                'marginBottom': '16px', 'flexWrap': 'wrap',
+            }, children=[
+                html.Div([
+                    html.Label('SEARCH COMPANY', style={
+                        'fontWeight': '600', 'fontSize': '10px', 'color': TEXT_SECONDARY,
+                        'display': 'block', 'marginBottom': '5px', 'letterSpacing': '1px',
+                    }),
+                    html.Div(style={'display': 'flex', 'gap': '8px'}, children=[
+                        dcc.Input(
+                            id='search-input', type='text', placeholder='Ticker or company name...',
+                            debounce=False,
+                            style={
+                                'width': '240px', 'padding': '9px 14px', 'fontSize': '14px',
+                                'border': f'1px solid {BORDER_COLOR}', 'borderRadius': '8px',
+                                'backgroundColor': BG_CARD, 'color': TEXT_PRIMARY,
+                                'outline': 'none',
+                            }
+                        ),
+                        html.Button('Find', id='search-btn', n_clicks=0, style={
+                            'padding': '9px 20px', 'fontSize': '13px', 'fontWeight': '700',
+                            'backgroundColor': '#4C78A8', 'color': 'white', 'border': 'none',
+                            'borderRadius': '8px', 'cursor': 'pointer', 'textTransform': 'uppercase',
+                            'letterSpacing': '0.3px',
+                        }),
+                        html.Button('Clear', id='clear-search-btn', n_clicks=0, style={
+                            'padding': '9px 16px', 'fontSize': '13px', 'fontWeight': '700',
+                            'backgroundColor': 'transparent', 'color': TEXT_SECONDARY,
+                            'border': f'1px solid {BORDER_COLOR}', 'borderRadius': '8px',
+                            'cursor': 'pointer', 'textTransform': 'uppercase',
+                            'letterSpacing': '0.3px',
+                        }),
+                    ]),
+                    html.Span(id='search-error', style={
+                        'color': ACCENT_RED, 'fontWeight': '600', 'fontSize': '12px',
+                        'marginTop': '4px', 'display': 'block',
+                    }),
+                ]),
+                # Company info card (shown after search)
+                html.Div(id='company-info', style={
+                    'flex': '1', 'minWidth': '300px',
+                }),
+            ]),
+
             # Stats row
             html.Div(id='stats-row', style={
                 'display': 'flex', 'gap': '12px', 'marginBottom': '16px', 'flexWrap': 'wrap',
@@ -455,9 +501,56 @@ def run_visualization(json_file: str, strength_value: float = 0.7) -> None:
                 ),
             ]),
 
+            # About section
+            html.Div(style={
+                'backgroundColor': BG_CARD, 'borderRadius': '12px',
+                'border': f'1px solid {BORDER_COLOR}', 'padding': '28px 32px',
+                'marginTop': '24px',
+            }, children=[
+                html.H2('About This Project', style={
+                    'color': TEXT_PRIMARY, 'fontSize': '18px', 'fontWeight': '700',
+                    'marginTop': '0', 'marginBottom': '14px',
+                }),
+                html.P([
+                    'This simulator models the S&P 500 as a ',
+                    html.B('weighted graph'),
+                    ', where each node represents a publicly traded company and edges connect '
+                    'companies whose stock prices are strongly correlated. We analyzed daily '
+                    'adjusted closing prices during the ',
+                    html.B('COVID-19 crash period (January\u2013August 2020)'),
+                    ' to capture market behavior under extreme stress.',
+                ], style={'color': TEXT_SECONDARY, 'fontSize': '13px', 'lineHeight': '1.7',
+                          'marginBottom': '12px'}),
+                html.P([
+                    'Edges are constructed using the ',
+                    html.B('Pearson correlation coefficient'),
+                    ' computed on log-returns of stock prices. Two companies are connected if '
+                    'their correlation exceeds ',
+                    html.B('r \u2265 0.7'),
+                    ', indicating strong co-movement. Edge weights represent the strength of this '
+                    'correlation\u2014higher weight means the companies tend to move together more closely.',
+                ], style={'color': TEXT_SECONDARY, 'fontSize': '13px', 'lineHeight': '1.7',
+                          'marginBottom': '12px'}),
+                html.P([
+                    'The crash simulation uses a ',
+                    html.B('recursive contagion model'),
+                    ': when a company crashes, the shock propagates to its neighbors proportionally '
+                    'to the edge weight. Each neighbor receives a reduced crash impact '
+                    '(crash % \u00d7 correlation), and the process continues recursively until the '
+                    'impact falls below a 1% threshold. This models how financial distress can '
+                    'cascade through interconnected markets.',
+                ], style={'color': TEXT_SECONDARY, 'fontSize': '13px', 'lineHeight': '1.7',
+                          'marginBottom': '12px'}),
+                html.Div(style={'marginTop': '16px'}, children=[
+                    html.Span('Data Source: ', style={'color': TEXT_SECONDARY, 'fontSize': '12px'}),
+                    html.Span('Yahoo Finance (yfinance)', style={
+                        'color': TEXT_PRIMARY, 'fontSize': '12px', 'fontWeight': '600'}),
+                ]),
+            ]),
+
             # Footer
             html.Div(style={
-                'textAlign': 'center', 'padding': '20px 0 10px', 'color': TEXT_SECONDARY,
+                'textAlign': 'center', 'padding': '20px 0 16px', 'color': TEXT_SECONDARY,
                 'fontSize': '11px',
             }, children=[
                 html.Span('CSC111 Winter 2026 — Arnab Karmokar, Brian Chang, Derek Sun, Johnny Li'),
@@ -518,6 +611,168 @@ def run_visualization(json_file: str, strength_value: float = 0.7) -> None:
         ]
 
         return fig, '', updated_stats, no_update, no_update
+
+    @app.callback(
+        Output('crash-graph', 'figure', allow_duplicate=True),
+        Output('company-info', 'children'),
+        Output('search-error', 'children'),
+        Output('search-input', 'value', allow_duplicate=True),
+        Input('search-btn', 'n_clicks'),
+        Input('clear-search-btn', 'n_clicks'),
+        Input('crash-graph', 'clickData'),
+        State('search-input', 'value'),
+        State('crash-graph', 'figure'),
+        prevent_initial_call=True
+    )
+    def search_company(search_clicks: int, clear_clicks: int,
+                       click_data: dict | None,
+                       search_val: str | None, current_fig: dict) -> tuple:
+        """Search for a company by ticker or name and highlight it on the graph.
+
+        Also triggered when user clicks a bar on the bar chart — automatically
+        looks up that company.
+        """
+        from dash import ctx
+        triggered = ctx.triggered_id
+
+        if triggered == 'clear-search-btn':
+            patched = Patch()
+            patched['layout']['annotations'] = []
+            return patched, '', '', ''
+
+        # If triggered by clicking the graph (bar chart), extract ticker from click
+        if triggered == 'crash-graph' and click_data:
+            point = click_data.get('points', [{}])[0]
+            # Bar chart clicks have 'y' as the ticker label
+            clicked_ticker = point.get('y', '')
+            if clicked_ticker and clicked_ticker in network.companies:
+                query = clicked_ticker.upper()
+            else:
+                return no_update, no_update, no_update, no_update
+        else:
+            if not search_val or not search_val.strip():
+                return no_update, no_update, 'Enter a ticker or company name.', no_update
+            query = search_val.strip().upper()
+
+        # Search by ticker first, then by name substring
+        match_ticker = None
+        if query in network.companies:
+            match_ticker = query
+        else:
+            for t, c in network.companies.items():
+                if c.name and query in c.name.upper():
+                    match_ticker = t
+                    break
+
+        if match_ticker is None:
+            return no_update, no_update, f'No company found matching "{search_val.strip()}".', no_update
+
+        company = network.companies[match_ticker]
+        company_pos = pos[match_ticker]
+
+        # Add highlight annotation to current figure
+        patched = Patch()
+        patched['layout']['annotations'] = [
+            dict(
+                x=company_pos[0], y=company_pos[1],
+                xref='x', yref='y',
+                text=f'<b>{match_ticker}</b>',
+                showarrow=True,
+                arrowhead=2, arrowsize=1.5, arrowwidth=2,
+                arrowcolor='#fbbf24',
+                ax=0, ay=-45,
+                font=dict(size=14, color='#fbbf24', family='Arial Black'),
+                bgcolor='rgba(15, 17, 23, 0.85)',
+                bordercolor='#fbbf24', borderwidth=2, borderpad=6,
+            )
+        ]
+
+        # Build company info card
+        # Get top neighbors
+        top_neighbors = sorted(
+            company.neighbors.items(),
+            key=lambda item: item[1],
+            reverse=True
+        )[:5]
+
+        neighbor_items = []
+        for neighbor_obj, weight in top_neighbors:
+            neighbor_items.append(
+                html.Div(style={
+                    'display': 'flex', 'justifyContent': 'space-between',
+                    'padding': '3px 0', 'borderBottom': f'1px solid {BORDER_COLOR}',
+                }, children=[
+                    html.Span(f'{neighbor_obj.ticker}', style={
+                        'color': TEXT_PRIMARY, 'fontSize': '12px', 'fontWeight': '600',
+                    }),
+                    html.Span(f'{neighbor_obj.name}', style={
+                        'color': TEXT_SECONDARY, 'fontSize': '11px',
+                        'flex': '1', 'marginLeft': '8px', 'overflow': 'hidden',
+                        'textOverflow': 'ellipsis', 'whiteSpace': 'nowrap',
+                    }),
+                    html.Span(f'r = {weight:.3f}', style={
+                        'color': '#fbbf24', 'fontSize': '11px', 'fontWeight': '600',
+                        'marginLeft': '8px', 'whiteSpace': 'nowrap',
+                    }),
+                ])
+            )
+
+        info_card = html.Div(style={
+            'backgroundColor': BG_CARD, 'borderRadius': '10px', 'padding': '16px 20px',
+            'border': f'1px solid #fbbf24',
+        }, children=[
+            html.Div(style={'display': 'flex', 'alignItems': 'baseline', 'gap': '10px',
+                            'marginBottom': '10px'}, children=[
+                html.Span(match_ticker, style={
+                    'fontSize': '20px', 'fontWeight': '800', 'color': '#fbbf24',
+                }),
+                html.Span(company.name, style={
+                    'fontSize': '14px', 'color': TEXT_PRIMARY, 'fontWeight': '500',
+                }),
+            ]),
+            html.Div(style={
+                'display': 'grid', 'gridTemplateColumns': '1fr 1fr', 'gap': '6px 20px',
+                'marginBottom': '12px',
+            }, children=[
+                html.Div([
+                    html.Span('Sector: ', style={'color': TEXT_SECONDARY, 'fontSize': '12px'}),
+                    html.Span(company.sector, style={'color': TEXT_PRIMARY, 'fontSize': '12px',
+                                                     'fontWeight': '600'}),
+                ]),
+                html.Div([
+                    html.Span('Sub-Industry: ', style={'color': TEXT_SECONDARY, 'fontSize': '12px'}),
+                    html.Span(company.sub_industry or 'N/A', style={
+                        'color': TEXT_PRIMARY, 'fontSize': '12px', 'fontWeight': '600'}),
+                ]),
+                html.Div([
+                    html.Span('Market Cap: ', style={'color': TEXT_SECONDARY, 'fontSize': '12px'}),
+                    html.Span(_format_money(company.market_cap), style={
+                        'color': ACCENT_GREEN, 'fontSize': '12px', 'fontWeight': '700'}),
+                ]),
+                html.Div([
+                    html.Span('Founded: ', style={'color': TEXT_SECONDARY, 'fontSize': '12px'}),
+                    html.Span(str(company.founded) if company.founded else 'N/A', style={
+                        'color': TEXT_PRIMARY, 'fontSize': '12px', 'fontWeight': '600'}),
+                ]),
+                html.Div([
+                    html.Span('Correlated Companies: ', style={'color': TEXT_SECONDARY, 'fontSize': '12px'}),
+                    html.Span(str(len(company.neighbors)), style={
+                        'color': TEXT_PRIMARY, 'fontSize': '12px', 'fontWeight': '700'}),
+                ]),
+            ]),
+            html.Div([
+                html.Div('Top 5 Correlated Companies', style={
+                    'fontSize': '11px', 'color': TEXT_SECONDARY, 'fontWeight': '600',
+                    'textTransform': 'uppercase', 'letterSpacing': '0.5px',
+                    'marginBottom': '6px',
+                }),
+                *neighbor_items,
+            ]) if neighbor_items else html.Div('No correlated neighbors at this threshold.', style={
+                'color': TEXT_SECONDARY, 'fontSize': '12px',
+            }),
+        ])
+
+        return patched, info_card, '', match_ticker
 
     print("Starting Dash server at http://127.0.0.1:8050")
     print("Press Ctrl+C to stop.\n")
