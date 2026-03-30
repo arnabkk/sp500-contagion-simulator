@@ -29,6 +29,7 @@ class Company:
     name: str
     sector: str
     sub_industry: str
+    hq_location: str
     founded: str
     history: dict[str, float]
     crashed: bool
@@ -43,6 +44,7 @@ class Company:
         self.name = data.get("name")
         self.sector = data.get("sector")
         self.sub_industry = data.get("sub_industry")
+        self.hq_location = data.get("hq_location")
         self.founded = data.get("founded")
         self.history = data.get("history", {})
         self.crashed = False
