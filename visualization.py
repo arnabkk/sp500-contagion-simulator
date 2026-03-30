@@ -512,7 +512,7 @@ def run_visualization(json_file: str, strength_value: float = 0.7) -> None:
         updated_stats = [
             _stat_card('Total Companies', str(total_companies), TEXT_PRIMARY),
             _stat_card('Network Edges', f'{total_edges:,}', TEXT_PRIMARY),
-            _stat_card('Total Market Cap', _format_money(total_market_cap), TEXT_PRIMARY),
+            _stat_card('Post-Crash Market Cap', _format_money(total_market_cap - stats['total_loss']), ACCENT_RED),
             _stat_card('Companies Affected', str(stats['affected_count']), ACCENT_RED),
             _stat_card('Total Market Loss', _format_money(stats['total_loss']), ACCENT_RED),
         ]
