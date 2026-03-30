@@ -15,8 +15,8 @@ This file is Copyright (c) 2026 Arnab Karmokar, Brian Chang, Derek Sun, Johnny L
 from __future__ import annotations
 
 import math
+import re
 import networkx as nx
-import numpy as np
 import plotly.graph_objs as go
 from plotly.subplots import make_subplots
 from dash import Dash, html, dcc, Input, Output, State, no_update, Patch
@@ -662,7 +662,6 @@ def run_visualization(json_file: str, strength_value: float = 0.7) -> None:
                 clicked_ticker = point['y']
             # Node clicks have ticker in the hover text as <b>TICKER</b>
             elif 'text' in point:
-                import re
                 match = re.search(r'<b>(\w+)</b>', point['text'])
                 if match and match.group(1) in network.companies:
                     clicked_ticker = match.group(1)
@@ -811,7 +810,7 @@ if __name__ == '__main__':
 
     import python_ta
     python_ta.check_all(config={
-        'extra-imports': ['math', 'networkx', 'numpy', 'plotly.graph_objs',
+        'extra-imports': ['math', 're', 'networkx', 'plotly.graph_objs',
                           'plotly.subplots', 'dash', 'classes'],
         'allowed-io': ['run_visualization'],
         'max-line-length': 120

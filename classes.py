@@ -12,6 +12,7 @@ class Company:
         - name: The full legal name of the company.
         - sector: The GICS Sector classification (i.e., "Industrials").
         - sub_industry: The GICS Sub-Industry classification (e.g., "Industrial Conglomerates").
+        - hq_location: The headquarters location of the company (e.g., "Cupertino, California").
         - founded: The year the company was founded.
         - history: A mapping from dates "YYYY-MM-DD" to adjusted closing prices.
         - crashed: Boolean value for whether the company is crashed
@@ -22,7 +23,7 @@ class Company:
     Representation Invariants:
         - self.ticker is not None
         - 0.0 <= self.crash_percentage <= 1.0
-        - self.status in {"Stable", "Crashed"}
+        - self.crashed in {True, False}
         - all(0.0 <= self.neighbors[neighbor] <= 1.0 for neighbor in self.neighbors)
     """
     ticker: str
@@ -163,7 +164,7 @@ def construct_market_network(json_file: str, strength_value: float = 0.7) -> Mar
     """ Convert S&P 500 JSON data into a MarketNetwork graph.
 
     Preconditions:
-        - 0.0 <= threshold <= 1.0
+        - 0.0 <= strength_value <= 1.0
         - json_file leads to a valid JSON containing 'STOCKS' data.
 
     """
