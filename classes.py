@@ -124,6 +124,26 @@ class MarketNetwork:
                 affected_dict[company] = post_crash_dict[company]/pre_crash_dict[company]
         return affected_dict
 
+    def to_networkx(self) -> Any:
+        """Convert this MarketNetwork into a networkx.Graph for layout computation.
+
+        Each node has attributes: 'sector', 'market_cap', 'name', 'sub_industry'.
+        Each edge has a 'weight' attribute (Pearson correlation coefficient).
+        """
+        import networkx as nx
+        g = nx.Graph()
+        for ticker, company in self.companies.items():
+            g.add_node(ticker, sector=company.sector, market_cap=company.market_cap,
+                       name=company.name, sub_industry=company.sub_industry)
+        visited = set()
+        for ticker, company in self.companies.items():
+            for neighbor, weight in company.neighbors.items():
+                edge = (min(ticker, neighbor.ticker), max(ticker, neighbor.ticker))
+                if edge not in visited:
+                    visited.add(edge)
+                    g.add_edge(ticker, neighbor.ticker, weight=weight)
+        return g
+
     def reset_market(self, affected_dict: dict[str, float]) -> None:
         """Reset self by mutating based off inputted dictionary.
 
