@@ -38,12 +38,12 @@ BORDER_COLOR = '#2d3348'
 def _format_money(value: float) -> str:
     """Format a dollar value into a human-readable string (e.g. $1.2T, $340B, $5.6M)."""
     abs_val = abs(value)
-    if abs_val >= 1 * (10 ** 12):
-        return f'${value / 1 * (10 ** 12):,.1f}T'
-    elif abs_val >= 1 * (10 ** 9):
-        return f'${value / 1 * (10 ** 9):,.1f}B'
-    elif abs_val >= 1 * (10 ** 6):
-        return f'${value / 1 * (10 ** 6):,.1f}M'
+    if abs_val >= 1e12:
+        return f'${value / 1e12:,.1f}T'
+    elif abs_val >= 1e9:
+        return f'${value / 1e9:,.1f}B'
+    elif abs_val >= 1e6:
+        return f'${value / 1e6:,.1f}M'
     else:
         return f'${value:,.0f}'
 
