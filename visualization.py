@@ -1,42 +1,40 @@
+"""CSC111 Winter 2026 Project 2: S&P 500 Market Crash Simulator (Visualization)
+
+Module Description
+==================
+
+This module provides an interactive Dash web app for visualizing the S&P 500
+market crash simulation. Users enter a ticker and crash percentage, and the app
+displays a network graph and bar chart of affected companies.
+
+Copyright and Usage Information
+===============================
+
+This file is Copyright (c) 2026 Arnab Karmokar, Brian Chang, Derek Sun, Johnny Li
+"""
 from __future__ import annotations
 
 import math
-import re
 import networkx as nx
 import plotly.graph_objs as go
 from plotly.subplots import make_subplots
-from dash import Dash, html, dcc, Input, Output, State, no_update, Patch
+from dash import Dash, html, dcc, Input, Output, State, no_update, ctx
 
 from classes import MarketNetwork, construct_market_network
 
-# GICS Sector color mapping — muted, professional palette
+# Sector colors
 SECTOR_COLOURS = {
-    'Information Technology': '#4C78A8',
-    'Health Care': '#54A24B',
-    'Financials': '#E45756',
-    'Consumer Discretionary': '#F58518',
-    'Communication Services': '#72B7B2',
-    'Industrials': '#EECA3B',
-    'Consumer Staples': '#B279A2',
-    'Energy': '#FF9DA6',
-    'Utilities': '#9D755D',
-    'Real Estate': '#BAB0AC',
-    'Materials': '#D67195',
+    'Information Technology': '#4C78A8', 'Health Care': '#54A24B',
+    'Financials': '#E45756', 'Consumer Discretionary': '#F58518',
+    'Communication Services': '#72B7B2', 'Industrials': '#EECA3B',
+    'Consumer Staples': '#B279A2', 'Energy': '#FF9DA6',
+    'Utilities': '#9D755D', 'Real Estate': '#BAB0AC', 'Materials': '#D67195',
 }
-
 STABLE_COLOUR = 'rgb(76, 175, 80)'
-BG_DARK = '#0f1117'
-BG_CARD = '#1a1d29'
-BG_GRAPH = '#141720'
-TEXT_PRIMARY = '#e8eaed'
-TEXT_SECONDARY = '#9aa0a6'
-ACCENT_RED = '#ef4444'
-ACCENT_GREEN = '#22c55e'
-BORDER_COLOR = '#2d3348'
 
 
 def _format_money(value: float) -> str:
-    """Format a dollar value into a human-readable string (e.g. $1.2T, $340B, $5.6M)."""
+    """Format a dollar value into a human-readable string (e.g. $1.2T, $340B)."""
     abs_val = abs(value)
     if abs_val >= 1e12:
         return f'${value / 1e12:,.1f}T'
@@ -56,7 +54,7 @@ def _scale_market_cap(market_cap: float) -> float:
 
 
 def _crash_color(crash_pct: float) -> str:
-    """Return an RGB color string interpolating from green to red based on crash severity."""
+    """Return an RGB color interpolating from green to red based on crash severity."""
     r = int(76 + (239 - 76) * crash_pct)
     g = int(175 - 145 * crash_pct)
     b = int(80 - 12 * crash_pct)
@@ -64,25 +62,18 @@ def _crash_color(crash_pct: float) -> str:
 
 
 def _compute_layout(graph_nx: nx.Graph) -> dict[str, tuple[float, float]]:
-    """Compute a spread-out layout by using only the strongest edges for positioning.
-
-    Uses a filtered subgraph (edges with weight > 0.85) for the spring layout
-    so that weakly correlated companies spread apart instead of clumping in the center.
-    """
+    """Compute a spread-out spring layout using only the strongest edges."""
     layout_graph = nx.Graph()
     layout_graph.add_nodes_from(graph_nx.nodes(data=True))
     for u, v, data in graph_nx.edges(data=True):
         if data.get('weight', 0) > 0.85:
             layout_graph.add_edge(u, v, weight=data['weight'])
 
-    pos = nx.spring_layout(
+    return nx.spring_layout(
         layout_graph,
         k=3.5 / math.sqrt(len(layout_graph.nodes)),
-        iterations=80,
-        seed=42,
-        scale=2.0
+        iterations=80, seed=42, scale=2.0
     )
-    return pos
 
 
 def _make_edge_trace(graph_nx: nx.Graph,
@@ -94,65 +85,49 @@ def _make_edge_trace(graph_nx: nx.Graph,
         y_edges += [pos[u][1], pos[v][1], None]
     return go.Scatter(
         x=x_edges, y=y_edges, mode='lines',
-        line=dict(color='rgba(100, 120, 160, 0.08)', width=0.4),
+        line=dict(color='rgba(100, 120, 160, 0.1)', width=0.4),
         hoverinfo='none', showlegend=False
     )
+
+
+def _style_figure(fig: go.Figure, title: str) -> None:
+    """Apply basic styling to a figure."""
+    fig.update_layout(
+        title=dict(text=title, x=0.5),
+        showlegend=False, height=650,
+        margin=dict(t=50, l=10, r=30, b=30),
+    )
+    fig.update_xaxes(showgrid=False, zeroline=False, visible=False, row=1, col=1)
+    fig.update_yaxes(showgrid=False, zeroline=False, visible=False, row=1, col=1)
+    fig.update_xaxes(title_text='Loss (%)', row=1, col=2, showgrid=True, zeroline=False)
+    fig.update_yaxes(autorange='reversed', row=1, col=2)
 
 
 def _build_baseline_figure(network: MarketNetwork,
                            graph_nx: nx.Graph,
                            pos: dict[str, tuple[float, float]]) -> go.Figure:
-    """Build the baseline figure with nodes colored by sector and no crash applied."""
-    fig = make_subplots(
-        rows=1, cols=2,
-        column_widths=[0.62, 0.38],
-        horizontal_spacing=0.12
-    )
-
+    """Build the baseline figure with nodes colored by sector."""
+    fig = make_subplots(rows=1, cols=2, column_widths=[0.6, 0.4], horizontal_spacing=0.1)
     fig.add_trace(_make_edge_trace(graph_nx, pos), row=1, col=1)
 
-    # Node trace — colored by sector
     tickers = list(pos.keys())
-    x_vals = [pos[t][0] for t in tickers]
-    y_vals = [pos[t][1] for t in tickers]
-    colors, sizes, hover_texts = [], [], []
-
+    colors, sizes, hovers = [], [], []
     for t in tickers:
         c = network.companies[t]
-        colors.append(SECTOR_COLOURS.get(c.sector, '#999999'))
+        colors.append(SECTOR_COLOURS.get(c.sector, '#999'))
         sizes.append(_scale_market_cap(c.market_cap))
-        hover_texts.append(
-            f"<b>{t}</b><br>"
-            f"{c.name}<br>"
-            f"Sector: {c.sector}<br>"
-            f"Market Cap: {_format_money(c.market_cap)}"
-        )
+        hovers.append(f"<b>{t}</b><br>{c.name}<br>Sector: {c.sector}<br>"
+                      f"Market Cap: {_format_money(c.market_cap)}")
 
     fig.add_trace(go.Scatter(
-        x=x_vals, y=y_vals, mode='markers',
-        marker=dict(size=sizes, color=colors, opacity=0.85,
-                    line=dict(color='rgba(255,255,255,0.3)', width=0.5)),
-        text=hover_texts, hovertemplate='%{text}<extra></extra>', showlegend=False
+        x=[pos[t][0] for t in tickers], y=[pos[t][1] for t in tickers],
+        mode='markers', marker=dict(size=sizes, color=colors, opacity=0.85),
+        text=hovers, hovertemplate='%{text}<extra></extra>', showlegend=False
     ), row=1, col=1)
 
-    # Empty placeholder for bar chart area
-    fig.add_trace(go.Bar(
-        x=[], y=[],
-        orientation='h', showlegend=False
-    ), row=1, col=2)
-
+    fig.add_trace(go.Bar(x=[0], y=['Run a simulation'], orientation='h',
+                         showlegend=False), row=1, col=2)
     _style_figure(fig, 'S&P 500 Network — Sector View')
-
-    # Centered message in the bar chart area
-    fig.add_annotation(
-        text='Simulate a crash to see results',
-        xref='x2', yref='y2',
-        x=0.5, y=0.5,
-        xanchor='center', yanchor='middle',
-        showarrow=False,
-        font=dict(size=14, color=TEXT_SECONDARY),
-    )
-
     return fig
 
 
@@ -161,28 +136,16 @@ def _build_crash_figure(network: MarketNetwork,
                         pos: dict[str, tuple[float, float]],
                         crash_ticker: str,
                         crash_pct: float,
-                        original_caps: dict[str, float]) -> tuple[go.Figure, dict]:
-    """Simulate a crash and build the resulting figure.
-
-    Returns the figure and a stats dict with summary information.
-    """
-    fig = make_subplots(
-        rows=1, cols=2,
-        column_widths=[0.62, 0.38],
-        horizontal_spacing=0.12
-    )
-
+                        original_caps: dict[str, float]) -> tuple[go.Figure, int, float]:
+    """Simulate a crash and build the figure. Returns (figure, affected_count, total_loss)."""
+    fig = make_subplots(rows=1, cols=2, column_widths=[0.6, 0.4], horizontal_spacing=0.1)
     affected = network.simulate_crash(crash_ticker, crash_pct)
-
     fig.add_trace(_make_edge_trace(graph_nx, pos), row=1, col=1)
 
-    # Node trace — colored by crash status
     tickers = list(pos.keys())
-    x_vals = [pos[t][0] for t in tickers]
-    y_vals = [pos[t][1] for t in tickers]
-    colors, sizes, hover_texts, symbols = [], [], [], []
-
+    colors, sizes, hovers = [], [], []
     total_loss = 0.0
+
     for t in tickers:
         c = network.companies[t]
         if t in affected:
@@ -191,65 +154,29 @@ def _build_crash_figure(network: MarketNetwork,
             total_loss += dollar_loss
             colors.append(_crash_color(min(loss_pct * 2.5, 1.0)))
             sizes.append(max(_scale_market_cap(original_caps[t]), 8))
-            hover_texts.append(
-                f"<b>{t}</b><br>{c.name}<br>Sector: {c.sector}<br>"
-                f"Loss: {loss_pct:.1%} ({_format_money(dollar_loss)})"
-            )
+            hovers.append(f"<b>{t}</b><br>{c.name}<br>Loss: {loss_pct:.1%} "
+                          f"({_format_money(dollar_loss)})")
         else:
             colors.append(STABLE_COLOUR)
             sizes.append(_scale_market_cap(c.market_cap))
-            hover_texts.append(
-                f"<b>{t}</b><br>{c.name}<br>Sector: {c.sector}<br>"
-                f"Market Cap: {_format_money(c.market_cap)}<br>Status: Stable"
-            )
-
-        if t == crash_ticker:
-            symbols.append('star')
-            sizes[-1] = max(sizes[-1], 16)
-        else:
-            symbols.append('circle-dot')
+            hovers.append(f"<b>{t}</b><br>{c.name}<br>Stable")
 
     fig.add_trace(go.Scatter(
-        x=x_vals, y=y_vals, mode='markers',
-        marker=dict(size=sizes, color=colors, symbol=symbols, opacity=0.9,
-                    line=dict(color='rgba(255,255,255,0.4)', width=0.5)),
-        text=hover_texts, hovertemplate='%{text}<extra></extra>', showlegend=False
+        x=[pos[t][0] for t in tickers], y=[pos[t][1] for t in tickers],
+        mode='markers', marker=dict(size=sizes, color=colors, opacity=0.9),
+        text=hovers, hovertemplate='%{text}<extra></extra>', showlegend=False
     ), row=1, col=1)
 
-    # Bar chart — top 15 most affected with monetary loss
+    # Bar chart — top 15 most affected
     sorted_affected = sorted(affected.items(), key=lambda x: x[1])[:15]
     bar_tickers = [t for t, _ in sorted_affected]
     bar_losses = [(1.0 - ratio) * 100 for _, ratio in sorted_affected]
-    bar_labels = [f"{t}" for t in bar_tickers]
     bar_colors = [_crash_color(min((1.0 - affected[t]) * 2.5, 1.0)) for t in bar_tickers]
 
-    # Custom hover with both % and $ loss
-    bar_hovers = []
-    for t, ratio in sorted_affected:
-        loss_pct = 1.0 - ratio
-        dollar_loss = original_caps[t] * loss_pct
-        c = network.companies[t]
-        bar_hovers.append(
-            f"<b>{t}</b> ({c.name})<br>"
-            f"Loss: {loss_pct:.1%}<br>"
-            f"Market Cap Lost: {_format_money(dollar_loss)}"
-        )
-
-    # Bar text showing both % and $ inline
-    bar_text = []
-    for t, ratio in sorted_affected:
-        loss_pct = 1.0 - ratio
-        dollar_loss = original_caps[t] * loss_pct
-        bar_text.append(f" {loss_pct:.1%}  |  {_format_money(dollar_loss)}")
-
+    bar_text = [f'{loss:.1f}%' for loss in bar_losses]
     fig.add_trace(go.Bar(
-        x=bar_losses, y=bar_labels, orientation='h',
-        marker=dict(color=bar_colors, line=dict(color='rgba(255,255,255,0.1)', width=0.5)),
-        text=bar_text,
-        textposition='outside',
-        textfont=dict(size=10, color=TEXT_SECONDARY),
-        customdata=bar_hovers,
-        hovertemplate='%{customdata}<extra></extra>',
+        x=bar_losses, y=bar_tickers, orientation='h',
+        marker=dict(color=bar_colors), text=bar_text, textposition='outside',
         showlegend=False
     ), row=1, col=2)
 
@@ -260,69 +187,15 @@ def _build_crash_figure(network: MarketNetwork,
         network.companies[t].market_cap = original_caps[t]
 
     company_name = network.companies[crash_ticker].name
-    title = f'{crash_ticker} ({company_name}) — {int(crash_pct * 100)}% Crash'
-    _style_figure(fig, title)
-
-    # Widen the x-axis range on bar chart so text labels don't clip
+    _style_figure(fig, f'{crash_ticker} ({company_name}) — {int(crash_pct * 100)}% Crash')
     max_loss = max(bar_losses) if bar_losses else 100
-    fig.update_xaxes(range=[0, max_loss * 1.6], row=1, col=2)
+    fig.update_xaxes(range=[0, max_loss * 1.5], row=1, col=2)
 
-    stats = {
-        'affected_count': len(affected),
-        'total_loss': total_loss,
-        'total_companies': len(network.companies),
-    }
-    return fig, stats
-
-
-def _style_figure(fig: go.Figure, title: str) -> None:
-    """Apply consistent dark-theme styling to a figure."""
-    fig.update_layout(
-        title=dict(text=title, font=dict(size=16, color=TEXT_PRIMARY), x=0.5, y=0.98),
-        showlegend=False,
-        plot_bgcolor=BG_GRAPH,
-        paper_bgcolor=BG_CARD,
-        height=680,
-        margin=dict(t=50, l=10, r=30, b=30),
-        font=dict(color=TEXT_SECONDARY),
-    )
-    fig.update_xaxes(showgrid=False, zeroline=False, visible=False, row=1, col=1)
-    fig.update_yaxes(showgrid=False, zeroline=False, visible=False, row=1, col=1)
-    fig.update_xaxes(
-        title_text='Loss (%)', row=1, col=2,
-        gridcolor='rgba(100,120,160,0.15)', showgrid=True, zeroline=False,
-        tickfont=dict(color=TEXT_SECONDARY, size=10),
-        title_font=dict(color=TEXT_SECONDARY, size=11)
-    )
-    fig.update_yaxes(
-        autorange='reversed', row=1, col=2,
-        tickfont=dict(color=TEXT_PRIMARY, size=11),
-        gridcolor='rgba(100,120,160,0.08)'
-    )
-
-
-def _stat_card(label: str, value: str, color: str) -> html.Div:
-    """Return a styled stat card Div."""
-    return html.Div(style={
-        'backgroundColor': BG_CARD, 'borderRadius': '10px', 'padding': '14px 22px',
-        'border': f'1px solid {BORDER_COLOR}', 'textAlign': 'center', 'minWidth': '150px',
-        'flex': '1',
-    }, children=[
-        html.Div(value, style={
-            'fontSize': '22px', 'fontWeight': '700', 'color': color, 'letterSpacing': '-0.5px'
-        }),
-        html.Div(label, style={
-            'fontSize': '11px', 'color': TEXT_SECONDARY, 'marginTop': '4px',
-            'textTransform': 'uppercase', 'letterSpacing': '0.5px'
-        }),
-    ])
+    return fig, len(affected), total_loss
 
 
 def run_visualization(json_file: str, strength_value: float = 0.7) -> None:
-    """Build the market network and launch the interactive Dash app.
-
-    Opens a local server at http://127.0.0.1:8050 in your browser.
-    Press Ctrl+C in the terminal to stop the server.
+    """Build the market network and launch the Dash app at http://127.0.0.1:8050.
 
     Preconditions:
         - json_file is a valid path to the S&P 500 JSON data file
@@ -330,239 +203,58 @@ def run_visualization(json_file: str, strength_value: float = 0.7) -> None:
     """
     print("Building market network...")
     network = construct_market_network(json_file, strength_value)
-
-    total_companies = len(network.companies)
-    total_edges = sum(len(c.neighbors) for c in network.companies.values()) // 2
-    print(f"Network built: {total_companies} companies, {total_edges} edges (r >= {strength_value})")
+    print(f"Network built: {len(network.companies)} companies")
 
     print("Computing graph layout...")
     graph_nx = network.to_networkx()
     pos = _compute_layout(graph_nx)
-
     original_caps = {t: c.market_cap for t, c in network.companies.items()}
-    total_market_cap = sum(original_caps.values())
 
-    # Build Dash app
-    app = Dash(__name__, title='S&P 500 Market Crash Simulator')
+    app = Dash(__name__, title='S&P 500 Crash Simulator')
 
-    app.layout = html.Div(style={
-        'fontFamily': "'Inter', 'Segoe UI', Arial, sans-serif",
-        'backgroundColor': BG_DARK, 'minHeight': '100vh', 'padding': '0',
-    }, children=[
+    app.layout = html.Div(style={'fontFamily': 'Arial, sans-serif', 'padding': '20px'}, children=[
+        html.H1('S&P 500 Market Crash Simulator'),
+        html.P('Simulating financial contagion across the S&P 500 during COVID-19 (2020)'),
 
-        # Header
-        html.Div(style={
-            'background': 'linear-gradient(135deg, #1a1d29 0%, #0f1117 100%)',
-            'padding': '24px 40px 18px', 'borderBottom': f'1px solid {BORDER_COLOR}',
-        }, children=[
-            html.Div(style={'maxWidth': '1400px', 'margin': '0 auto'}, children=[
-                html.H1('S&P 500 Market Crash Simulator', style={
-                    'color': TEXT_PRIMARY, 'margin': '0 0 2px 0', 'fontSize': '24px',
-                    'fontWeight': '700', 'letterSpacing': '-0.5px',
-                }),
-                html.P('Simulating financial contagion across the S&P 500 during COVID-19 (2020)', style={
-                    'color': TEXT_SECONDARY, 'margin': '0', 'fontSize': '13px',
-                }),
+        # Controls
+        html.Div(style={'display': 'flex', 'gap': '10px', 'alignItems': 'flex-end',
+                        'marginBottom': '10px'}, children=[
+            html.Div([
+                html.Label('Ticker'),
+                dcc.Input(id='ticker-input', type='text', placeholder='AAPL',
+                          style={'display': 'block', 'padding': '6px', 'width': '100px'}),
             ]),
+            html.Div([
+                html.Label('Crash %'),
+                dcc.Input(id='crash-input', type='number', placeholder='50',
+                          min=1, max=100, step=1,
+                          style={'display': 'block', 'padding': '6px', 'width': '80px'}),
+            ]),
+            html.Button('Simulate', id='simulate-btn', n_clicks=0,
+                        style={'padding': '8px 20px', 'backgroundColor': '#E45756',
+                               'color': 'white', 'border': 'none', 'cursor': 'pointer'}),
+            html.Button('Reset', id='reset-btn', n_clicks=0,
+                        style={'padding': '8px 20px', 'cursor': 'pointer'}),
+            html.Span(id='error-msg', style={'color': 'red', 'fontWeight': 'bold'}),
         ]),
 
-        # Main content
-        html.Div(style={'maxWidth': '1400px', 'margin': '0 auto', 'padding': '20px 40px'}, children=[
+        # Company info box (hidden until simulation runs)
+        html.Div(id='company-info', style={'marginBottom': '10px'}),
 
-            # Controls row
-            html.Div(style={
-                'display': 'flex', 'alignItems': 'flex-end', 'gap': '14px',
-                'marginBottom': '16px', 'flexWrap': 'wrap',
-            }, children=[
-                html.Div([
-                    html.Label('TICKER', style={
-                        'fontWeight': '600', 'fontSize': '10px', 'color': TEXT_SECONDARY,
-                        'display': 'block', 'marginBottom': '5px', 'letterSpacing': '1px',
-                    }),
-                    dcc.Input(
-                        id='ticker-input', type='text', placeholder='AAPL',
-                        debounce=False,
-                        style={
-                            'width': '110px', 'padding': '9px 14px', 'fontSize': '15px',
-                            'border': f'1px solid {BORDER_COLOR}', 'borderRadius': '8px',
-                            'backgroundColor': BG_CARD, 'color': TEXT_PRIMARY,
-                            'textTransform': 'uppercase', 'fontWeight': '600',
-                            'outline': 'none',
-                        }
-                    ),
-                ]),
-                html.Div([
-                    html.Label('CRASH %', style={
-                        'fontWeight': '600', 'fontSize': '10px', 'color': TEXT_SECONDARY,
-                        'display': 'block', 'marginBottom': '5px', 'letterSpacing': '1px',
-                    }),
-                    dcc.Input(
-                        id='crash-input', type='number', placeholder='50',
-                        min=1, max=100, step=1,
-                        style={
-                            'width': '80px', 'padding': '9px 14px', 'fontSize': '15px',
-                            'border': f'1px solid {BORDER_COLOR}', 'borderRadius': '8px',
-                            'backgroundColor': BG_CARD, 'color': TEXT_PRIMARY,
-                            'fontWeight': '600', 'outline': 'none',
-                        }
-                    ),
-                ]),
-                html.Button('Simulate Crash', id='simulate-btn', n_clicks=0, style={
-                    'padding': '10px 28px', 'fontSize': '13px', 'fontWeight': '700',
-                    'backgroundColor': ACCENT_RED, 'color': 'white', 'border': 'none',
-                    'borderRadius': '8px', 'cursor': 'pointer', 'letterSpacing': '0.3px',
-                    'textTransform': 'uppercase',
-                }),
-                html.Button('Reset', id='reset-btn', n_clicks=0, style={
-                    'padding': '10px 28px', 'fontSize': '13px', 'fontWeight': '700',
-                    'backgroundColor': 'transparent', 'color': ACCENT_GREEN,
-                    'border': f'1px solid {ACCENT_GREEN}', 'borderRadius': '8px',
-                    'cursor': 'pointer', 'letterSpacing': '0.3px', 'textTransform': 'uppercase',
-                }),
+        # Stats line
+        html.Div(id='stats-line', style={'marginBottom': '10px', 'fontSize': '14px'}),
 
-                # Error message inline
-                html.Span(id='error-msg', style={
-                    'color': ACCENT_RED, 'fontWeight': '600', 'fontSize': '13px',
-                    'marginLeft': '10px',
-                }),
-            ]),
-
-            # Search row
-            html.Div(style={
-                'display': 'flex', 'alignItems': 'flex-start', 'gap': '14px',
-                'marginBottom': '16px', 'flexWrap': 'wrap',
-            }, children=[
-                html.Div([
-                    html.Label('SEARCH COMPANY', style={
-                        'fontWeight': '600', 'fontSize': '10px', 'color': TEXT_SECONDARY,
-                        'display': 'block', 'marginBottom': '5px', 'letterSpacing': '1px',
-                    }),
-                    html.Div(style={'display': 'flex', 'gap': '8px'}, children=[
-                        dcc.Input(
-                            id='search-input', type='text', placeholder='Ticker or company name...',
-                            debounce=False,
-                            style={
-                                'width': '240px', 'padding': '9px 14px', 'fontSize': '14px',
-                                'border': f'1px solid {BORDER_COLOR}', 'borderRadius': '8px',
-                                'backgroundColor': BG_CARD, 'color': TEXT_PRIMARY,
-                                'outline': 'none',
-                            }
-                        ),
-                        html.Button('Find', id='search-btn', n_clicks=0, style={
-                            'padding': '9px 20px', 'fontSize': '13px', 'fontWeight': '700',
-                            'backgroundColor': '#4C78A8', 'color': 'white', 'border': 'none',
-                            'borderRadius': '8px', 'cursor': 'pointer', 'textTransform': 'uppercase',
-                            'letterSpacing': '0.3px',
-                        }),
-                        html.Button('Clear', id='clear-search-btn', n_clicks=0, style={
-                            'padding': '9px 16px', 'fontSize': '13px', 'fontWeight': '700',
-                            'backgroundColor': 'transparent', 'color': TEXT_SECONDARY,
-                            'border': f'1px solid {BORDER_COLOR}', 'borderRadius': '8px',
-                            'cursor': 'pointer', 'textTransform': 'uppercase',
-                            'letterSpacing': '0.3px',
-                        }),
-                    ]),
-                    html.Span(id='search-error', style={
-                        'color': ACCENT_RED, 'fontWeight': '600', 'fontSize': '12px',
-                        'marginTop': '4px', 'display': 'block',
-                    }),
-                ]),
-                # Company info card (shown after search)
-                html.Div(id='company-info', style={
-                    'flex': '1', 'minWidth': '300px',
-                }),
-            ]),
-
-            # Stats row
-            html.Div(id='stats-row', style={
-                'display': 'flex', 'gap': '12px', 'marginBottom': '16px', 'flexWrap': 'wrap',
-            }, children=[
-                _stat_card('Total Companies', str(total_companies), TEXT_PRIMARY),
-                _stat_card('Network Edges', f'{total_edges:,}', TEXT_PRIMARY),
-                _stat_card('Total Market Cap', _format_money(total_market_cap), TEXT_PRIMARY),
-                _stat_card('Companies Affected', '—', TEXT_SECONDARY),
-                _stat_card('Total Market Loss', '—', TEXT_SECONDARY),
-            ]),
-
-            # Graph
-            html.Div(style={
-                'backgroundColor': BG_CARD, 'borderRadius': '12px',
-                'border': f'1px solid {BORDER_COLOR}', 'overflow': 'hidden',
-            }, children=[
-                dcc.Graph(
-                    id='crash-graph',
-                    figure=_build_baseline_figure(network, graph_nx, pos),
-                    config={'displayModeBar': True, 'displaylogo': False,
-                            'modeBarButtonsToRemove': ['lasso2d', 'select2d']},
-                    style={'width': '100%'}
-                ),
-            ]),
-
-            # About section
-            html.Div(style={
-                'backgroundColor': BG_CARD, 'borderRadius': '12px',
-                'border': f'1px solid {BORDER_COLOR}', 'padding': '28px 32px',
-                'marginTop': '24px',
-            }, children=[
-                html.H2('About This Project', style={
-                    'color': TEXT_PRIMARY, 'fontSize': '18px', 'fontWeight': '700',
-                    'marginTop': '0', 'marginBottom': '14px',
-                }),
-                html.P([
-                    'This simulator models the S&P 500 as a ',
-                    html.B('weighted graph'),
-                    ', where each node represents a publicly traded company and edges connect '
-                    'companies whose stock prices are strongly correlated. We analyzed daily '
-                    'adjusted closing prices during the ',
-                    html.B('COVID-19 crash period (January\u2013August 2020)'),
-                    ' to capture market behavior under extreme stress.',
-                ], style={'color': TEXT_SECONDARY, 'fontSize': '13px', 'lineHeight': '1.7',
-                          'marginBottom': '12px'}),
-                html.P([
-                    'Edges are constructed using the ',
-                    html.B('Pearson correlation coefficient'),
-                    ' computed on log-returns of stock prices. Two companies are connected if '
-                    'their correlation exceeds ',
-                    html.B('r \u2265 0.7'),
-                    ', indicating strong co-movement. Edge weights represent the strength of this '
-                    'correlation\u2014higher weight means the companies tend to move together more closely.',
-                ], style={'color': TEXT_SECONDARY, 'fontSize': '13px', 'lineHeight': '1.7',
-                          'marginBottom': '12px'}),
-                html.P([
-                    'The crash simulation uses a ',
-                    html.B('recursive contagion model'),
-                    ': when a company crashes, the shock propagates to its neighbors proportionally '
-                    'to the edge weight. Each neighbor receives a reduced crash impact '
-                    '(crash % \u00d7 correlation), and the process continues recursively until the '
-                    'impact falls below a 1% threshold. This models how financial distress can '
-                    'cascade through interconnected markets.',
-                ], style={'color': TEXT_SECONDARY, 'fontSize': '13px', 'lineHeight': '1.7',
-                          'marginBottom': '12px'}),
-                html.Div(style={'marginTop': '16px'}, children=[
-                    html.Span('Data Source: ', style={'color': TEXT_SECONDARY, 'fontSize': '12px'}),
-                    html.A('Yahoo Finance (yfinance)', href='https://pypi.org/project/yfinance/',
-                           target='_blank', style={
-                            'color': '#4C78A8', 'fontSize': '12px', 'fontWeight': '600',
-                            'textDecoration': 'none'}),
-                ]),
-            ]),
-
-            # Footer
-            html.Div(style={
-                'textAlign': 'center', 'padding': '20px 0 16px', 'color': TEXT_SECONDARY,
-                'fontSize': '11px',
-            }, children=[
-                html.Span('CSC111 Winter 2026 — Arnab Karmokar, Brian Chang, Derek Sun, Johnny Li'),
-            ]),
-        ]),
+        # Graph
+        dcc.Graph(id='crash-graph',
+                  figure=_build_baseline_figure(network, graph_nx, pos),
+                  config={'displaylogo': False}),
     ])
 
     @app.callback(
         Output('crash-graph', 'figure'),
         Output('error-msg', 'children'),
-        Output('stats-row', 'children'),
-        Output('ticker-input', 'value'),
-        Output('crash-input', 'value'),
+        Output('stats-line', 'children'),
+        Output('company-info', 'children'),
         Input('simulate-btn', 'n_clicks'),
         Input('reset-btn', 'n_clicks'),
         State('ticker-input', 'value'),
@@ -570,223 +262,48 @@ def run_visualization(json_file: str, strength_value: float = 0.7) -> None:
     )
     def update_graph(sim_clicks: int, reset_clicks: int,
                      ticker_val: str | None, crash_val: float | None) -> tuple:
-        """Update the graph and stats based on user inputs."""
-        from dash import ctx
-
+        """Update the graph based on user inputs."""
         triggered = ctx.triggered_id
-        default_stats = [
-            _stat_card('Total Companies', str(total_companies), TEXT_PRIMARY),
-            _stat_card('Network Edges', f'{total_edges:,}', TEXT_PRIMARY),
-            _stat_card('Total Market Cap', _format_money(total_market_cap), TEXT_PRIMARY),
-            _stat_card('Companies Affected', '—', TEXT_SECONDARY),
-            _stat_card('Total Market Loss', '—', TEXT_SECONDARY),
-        ]
 
         if triggered == 'reset-btn':
-            return _build_baseline_figure(network, graph_nx, pos), '', default_stats, '', None
+            return _build_baseline_figure(network, graph_nx, pos), '', '', ''
 
         if triggered != 'simulate-btn':
-            return no_update, '', no_update, no_update, no_update
+            return no_update, '', no_update, no_update
 
         if not ticker_val or not ticker_val.strip():
-            return no_update, 'Please enter a ticker symbol.', no_update, no_update, no_update
+            return no_update, 'Enter a ticker symbol.', no_update, no_update
 
         ticker = ticker_val.strip().upper()
         if ticker not in network.companies:
-            return no_update, f'Ticker "{ticker}" not found in S&P 500.', no_update, no_update, no_update
+            return no_update, f'"{ticker}" not found.', no_update, no_update
 
         if crash_val is None or crash_val < 1 or crash_val > 100:
-            return no_update, 'Enter a crash % between 1 and 100.', no_update, no_update, no_update
+            return no_update, 'Crash % must be 1-100.', no_update, no_update
 
-        crash_pct = crash_val / 100.0
-        fig, stats = _build_crash_figure(network, graph_nx, pos, ticker, crash_pct, original_caps)
-
-        updated_stats = [
-            _stat_card('Total Companies', str(total_companies), TEXT_PRIMARY),
-            _stat_card('Network Edges', f'{total_edges:,}', TEXT_PRIMARY),
-            _stat_card('Post-Crash Market Cap', _format_money(total_market_cap - stats['total_loss']), ACCENT_RED),
-            _stat_card('Companies Affected', str(stats['affected_count']), ACCENT_RED),
-            _stat_card('Total Market Loss', _format_money(stats['total_loss']), ACCENT_RED),
-        ]
-
-        return fig, '', updated_stats, no_update, no_update
-
-    @app.callback(
-        Output('crash-graph', 'figure', allow_duplicate=True),
-        Output('company-info', 'children'),
-        Output('search-error', 'children'),
-        Output('search-input', 'value', allow_duplicate=True),
-        Input('search-btn', 'n_clicks'),
-        Input('clear-search-btn', 'n_clicks'),
-        Input('crash-graph', 'clickData'),
-        State('search-input', 'value'),
-        State('crash-graph', 'figure'),
-        prevent_initial_call=True
-    )
-    def search_company(search_clicks: int, clear_clicks: int,
-                       click_data: dict | None,
-                       search_val: str | None, current_fig: dict) -> tuple:
-        """Search for a company by ticker or name and highlight it on the graph.
-
-        Also triggered when user clicks a bar on the bar chart — automatically
-        looks up that company.
-        """
-        from dash import ctx
-        triggered = ctx.triggered_id
-
-        if triggered == 'clear-search-btn':
-            patched = Patch()
-            patched['layout']['annotations'] = []
-            return patched, '', '', ''
-
-        # If triggered by clicking the graph (bar or node), extract ticker from click
-        if triggered == 'crash-graph' and click_data:
-            point = click_data.get('points', [{}])[0]
-            clicked_ticker = ''
-            # Bar chart clicks have 'y' as the ticker label
-            if point.get('y', '') in network.companies:
-                clicked_ticker = point['y']
-            # Node clicks have ticker in the hover text as <b>TICKER</b>
-            elif 'text' in point:
-                match = re.search(r'<b>(\w+)</b>', point['text'])
-                if match and match.group(1) in network.companies:
-                    clicked_ticker = match.group(1)
-            if clicked_ticker:
-                query = clicked_ticker.upper()
-            else:
-                return no_update, no_update, no_update, no_update
-        else:
-            if not search_val or not search_val.strip():
-                return no_update, no_update, 'Enter a ticker or company name.', no_update
-            query = search_val.strip().upper()
-
-        # Search by ticker first, then by name substring
-        match_ticker = None
-        if query in network.companies:
-            match_ticker = query
-        else:
-            for t, c in network.companies.items():
-                if c.name and query in c.name.upper():
-                    match_ticker = t
-                    break
-
-        if match_ticker is None:
-            return no_update, no_update, f'No company found matching "{search_val.strip()}".', no_update
-
-        company = network.companies[match_ticker]
-        company_pos = pos[match_ticker]
-
-        # Add highlight annotation to current figure
-        patched = Patch()
-        patched['layout']['annotations'] = [
-            dict(
-                x=company_pos[0], y=company_pos[1],
-                xref='x', yref='y',
-                text=f'<b>{match_ticker}</b>',
-                showarrow=True,
-                arrowhead=2, arrowsize=1.5, arrowwidth=2,
-                arrowcolor='#fbbf24',
-                ax=0, ay=-45,
-                font=dict(size=14, color='#fbbf24', family='Arial Black'),
-                bgcolor='rgba(15, 17, 23, 0.85)',
-                bordercolor='#fbbf24', borderwidth=2, borderpad=6,
-            )
-        ]
+        fig, affected_count, total_loss = _build_crash_figure(
+            network, graph_nx, pos, ticker, crash_val / 100.0, original_caps
+        )
+        stats = f'Companies affected: {affected_count} | Total loss: {_format_money(total_loss)}'
 
         # Build company info card
-        # Get top neighbors
-        top_neighbors = sorted(
-            company.neighbors.items(),
-            key=lambda item: item[1],
-            reverse=True
-        )[:5]
+        company = network.companies[ticker]
+        info_card = html.Div(
+            style={'padding': '10px', 'border': '1px solid #ccc',
+                   'borderRadius': '5px', 'backgroundColor': '#f9f9f9',
+                   'maxWidth': '400px'},
+            children=[
+                html.H3(f'{company.name} ({ticker})', style={'margin': '0 0 5px 0'}),
+                html.P(f'Sector: {company.sector}'),
+                html.P(f'Sub-Industry: {company.sub_industry}'),
+                html.P(f'Headquarters: {company.hq_location}'),
+                html.P(f'Founded: {company.founded}'),
+                html.P(f'Market Cap: {_format_money(original_caps[ticker])}'),
+            ]
+        )
+        return fig, '', stats, info_card
 
-        neighbor_items = []
-        for neighbor_obj, weight in top_neighbors:
-            neighbor_items.append(
-                html.Div(style={
-                    'display': 'flex', 'justifyContent': 'space-between',
-                    'padding': '3px 0', 'borderBottom': f'1px solid {BORDER_COLOR}',
-                }, children=[
-                    html.Span(f'{neighbor_obj.ticker}', style={
-                        'color': TEXT_PRIMARY, 'fontSize': '12px', 'fontWeight': '600',
-                    }),
-                    html.Span(f'{neighbor_obj.name}', style={
-                        'color': TEXT_SECONDARY, 'fontSize': '11px',
-                        'flex': '1', 'marginLeft': '8px', 'overflow': 'hidden',
-                        'textOverflow': 'ellipsis', 'whiteSpace': 'nowrap',
-                    }),
-                    html.Span(f'r = {weight:.3f}', style={
-                        'color': '#fbbf24', 'fontSize': '11px', 'fontWeight': '600',
-                        'marginLeft': '8px', 'whiteSpace': 'nowrap',
-                    }),
-                ])
-            )
-
-        info_card = html.Div(style={
-            'backgroundColor': BG_CARD, 'borderRadius': '10px', 'padding': '16px 20px',
-            'border': f'1px solid #fbbf24',
-        }, children=[
-            html.Div(style={'display': 'flex', 'alignItems': 'baseline', 'gap': '10px',
-                            'marginBottom': '10px'}, children=[
-                html.Span(match_ticker, style={
-                    'fontSize': '20px', 'fontWeight': '800', 'color': '#fbbf24',
-                }),
-                html.Span(company.name, style={
-                    'fontSize': '14px', 'color': TEXT_PRIMARY, 'fontWeight': '500',
-                }),
-            ]),
-            html.Div(style={
-                'display': 'grid', 'gridTemplateColumns': '1fr 1fr', 'gap': '6px 20px',
-                'marginBottom': '12px',
-            }, children=[
-                html.Div([
-                    html.Span('Sector: ', style={'color': TEXT_SECONDARY, 'fontSize': '12px'}),
-                    html.Span(company.sector, style={'color': TEXT_PRIMARY, 'fontSize': '12px',
-                                                     'fontWeight': '600'}),
-                ]),
-                html.Div([
-                    html.Span('Sub-Industry: ', style={'color': TEXT_SECONDARY, 'fontSize': '12px'}),
-                    html.Span(company.sub_industry or 'N/A', style={
-                        'color': TEXT_PRIMARY, 'fontSize': '12px', 'fontWeight': '600'}),
-                ]),
-                html.Div([
-                    html.Span('Market Cap: ', style={'color': TEXT_SECONDARY, 'fontSize': '12px'}),
-                    html.Span(_format_money(company.market_cap), style={
-                        'color': ACCENT_GREEN, 'fontSize': '12px', 'fontWeight': '700'}),
-                ]),
-                html.Div([
-                    html.Span('HQ: ', style={'color': TEXT_SECONDARY, 'fontSize': '12px'}),
-                    html.Span(company.hq_location or 'N/A', style={
-                        'color': TEXT_PRIMARY, 'fontSize': '12px', 'fontWeight': '600'}),
-                ]),
-                html.Div([
-                    html.Span('Founded: ', style={'color': TEXT_SECONDARY, 'fontSize': '12px'}),
-                    html.Span(str(company.founded) if company.founded else 'N/A', style={
-                        'color': TEXT_PRIMARY, 'fontSize': '12px', 'fontWeight': '600'}),
-                ]),
-                html.Div([
-                    html.Span('Correlated Companies: ', style={'color': TEXT_SECONDARY, 'fontSize': '12px'}),
-                    html.Span(str(len(company.neighbors)), style={
-                        'color': TEXT_PRIMARY, 'fontSize': '12px', 'fontWeight': '700'}),
-                ]),
-            ]),
-            html.Div([
-                html.Div('Top 5 Correlated Companies', style={
-                    'fontSize': '11px', 'color': TEXT_SECONDARY, 'fontWeight': '600',
-                    'textTransform': 'uppercase', 'letterSpacing': '0.5px',
-                    'marginBottom': '6px',
-                }),
-                *neighbor_items,
-            ]) if neighbor_items else html.Div('No correlated neighbors at this threshold.', style={
-                'color': TEXT_SECONDARY, 'fontSize': '12px',
-            }),
-        ])
-
-        return patched, info_card, '', match_ticker
-
-    print("Starting Dash server at http://127.0.0.1:8050")
-    print("Press Ctrl+C to stop.\n")
+    print("Starting server at http://127.0.0.1:8050 — press Ctrl+C to stop.")
     app.run(debug=False)
 
 
@@ -796,7 +313,7 @@ if __name__ == '__main__':
 
     import python_ta
     python_ta.check_all(config={
-        'extra-imports': ['math', 're', 'networkx', 'plotly.graph_objs',
+        'extra-imports': ['math', 'networkx', 'plotly.graph_objs',
                           'plotly.subplots', 'dash', 'classes'],
         'allowed-io': ['run_visualization'],
         'max-line-length': 120
