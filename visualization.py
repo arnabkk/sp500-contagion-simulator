@@ -85,7 +85,7 @@ def _make_edge_trace(graph_nx: nx.Graph,
         y_edges += [pos[u][1], pos[v][1], None]
     return go.Scatter(
         x=x_edges, y=y_edges, mode='lines',
-        line=dict(color='rgba(100, 120, 160, 0.1)', width=0.4),
+        line={'color': 'rgba(100, 120, 160, 0.1)', 'width': 0.4},
         hoverinfo='none', showlegend=False
     )
 
@@ -93,9 +93,9 @@ def _make_edge_trace(graph_nx: nx.Graph,
 def _style_figure(fig: go.Figure, title: str) -> None:
     """Apply basic styling to a figure."""
     fig.update_layout(
-        title=dict(text=title, x=0.5),
+        title={'text': title, 'x': 0.5},
         showlegend=False, height=650,
-        margin=dict(t=50, l=10, r=30, b=30),
+        margin={'t': 50, 'l': 10, 'r': 30, 'b': 30},
     )
     fig.update_xaxes(showgrid=False, zeroline=False, visible=False, row=1, col=1)
     fig.update_yaxes(showgrid=False, zeroline=False, visible=False, row=1, col=1)
@@ -120,8 +120,8 @@ def _build_baseline_figure(network: MarketNetwork,
                       f"Market Cap: {_format_money(c.market_cap)}")
 
     fig.add_trace(go.Scatter(
-        x=[pos[t][0] for t in tickers], y=[pos[t][1] for t in tickers],
-        mode='markers', marker=dict(size=sizes, color=colors, opacity=0.85),
+        x=[pos[tk][0] for tk in tickers], y=[pos[tk][1] for tk in tickers],
+        mode='markers', marker={'size': sizes, 'color': colors, 'opacity': 0.85},
         text=hovers, hovertemplate='%{text}<extra></extra>', showlegend=False
     ), row=1, col=1)
 
@@ -131,64 +131,78 @@ def _build_baseline_figure(network: MarketNetwork,
     return fig
 
 
+def _build_crash_node_data(network: MarketNetwork,
+                           tickers: list[str],
+                           affected: dict[str, float],
+                           original_caps: dict[str, float]) -> tuple[list, list, list, float]:
+    """Build node colors, sizes, hover texts, and total loss for crash visualization."""
+    colors, sizes, hovers = [], [], []
+    total_loss = 0.0
+    for tk in tickers:
+        company = network.companies[tk]
+        if tk in affected:
+            loss_pct = 1.0 - affected[tk]
+            dollar_loss = original_caps[tk] * loss_pct
+            total_loss += dollar_loss
+            colors.append(_crash_color(min(loss_pct * 2.5, 1.0)))
+            sizes.append(max(_scale_market_cap(original_caps[tk]), 8))
+            hovers.append(f"<b>{tk}</b><br>{company.name}<br>Loss: {loss_pct:.1%} "
+                          f"({_format_money(dollar_loss)})")
+        else:
+            colors.append(STABLE_COLOUR)
+            sizes.append(_scale_market_cap(company.market_cap))
+            hovers.append(f"<b>{tk}</b><br>{company.name}<br>Stable")
+    return colors, sizes, hovers, total_loss
+
+
+def _add_crash_bar_chart(fig: go.Figure, affected: dict[str, float]) -> tuple[float, list[float]]:
+    """Add a bar chart of top 15 most affected companies. Returns (max_loss, bar_losses)."""
+    sorted_affected = sorted(affected.items(), key=lambda x: x[1])[:15]
+    bar_tickers = [tk for tk, _ in sorted_affected]
+    bar_losses = [(1.0 - ratio) * 100 for _, ratio in sorted_affected]
+    bar_colors = [_crash_color(min((1.0 - affected[tk]) * 2.5, 1.0)) for tk in bar_tickers]
+    bar_text = [f'{loss:.1f}%' for loss in bar_losses]
+    fig.add_trace(go.Bar(
+        x=bar_losses, y=bar_tickers, orientation='h',
+        marker={'color': bar_colors}, text=bar_text, textposition='outside',
+        showlegend=False
+    ), row=1, col=2)
+    max_loss = max(bar_losses) if bar_losses else 100
+    return max_loss, bar_losses
+
+
+def _reset_market_state(network: MarketNetwork, original_caps: dict[str, float]) -> None:
+    """Reset all companies to their original (pre-crash) state."""
+    for ticker in network.companies:
+        network.companies[ticker].crashed = False
+        network.companies[ticker].crash_percentage = 0.0
+        network.companies[ticker].market_cap = original_caps[ticker]
+
+
 def _build_crash_figure(network: MarketNetwork,
                         graph_nx: nx.Graph,
                         pos: dict[str, tuple[float, float]],
-                        crash_ticker: str,
-                        crash_pct: float,
+                        crash_info: tuple[str, float],
                         original_caps: dict[str, float]) -> tuple[go.Figure, int, float]:
     """Simulate a crash and build the figure. Returns (figure, affected_count, total_loss)."""
+    crash_ticker, crash_pct = crash_info
     fig = make_subplots(rows=1, cols=2, column_widths=[0.6, 0.4], horizontal_spacing=0.1)
     affected = network.simulate_crash(crash_ticker, crash_pct)
     fig.add_trace(_make_edge_trace(graph_nx, pos), row=1, col=1)
 
     tickers = list(pos.keys())
-    colors, sizes, hovers = [], [], []
-    total_loss = 0.0
-
-    for t in tickers:
-        c = network.companies[t]
-        if t in affected:
-            loss_pct = 1.0 - affected[t]
-            dollar_loss = original_caps[t] * loss_pct
-            total_loss += dollar_loss
-            colors.append(_crash_color(min(loss_pct * 2.5, 1.0)))
-            sizes.append(max(_scale_market_cap(original_caps[t]), 8))
-            hovers.append(f"<b>{t}</b><br>{c.name}<br>Loss: {loss_pct:.1%} "
-                          f"({_format_money(dollar_loss)})")
-        else:
-            colors.append(STABLE_COLOUR)
-            sizes.append(_scale_market_cap(c.market_cap))
-            hovers.append(f"<b>{t}</b><br>{c.name}<br>Stable")
+    colors, sizes, hovers, total_loss = _build_crash_node_data(network, tickers, affected, original_caps)
 
     fig.add_trace(go.Scatter(
         x=[pos[t][0] for t in tickers], y=[pos[t][1] for t in tickers],
-        mode='markers', marker=dict(size=sizes, color=colors, opacity=0.9),
+        mode='markers', marker={'size': sizes, 'color': colors, 'opacity': 0.9},
         text=hovers, hovertemplate='%{text}<extra></extra>', showlegend=False
     ), row=1, col=1)
 
-    # Bar chart — top 15 most affected
-    sorted_affected = sorted(affected.items(), key=lambda x: x[1])[:15]
-    bar_tickers = [t for t, _ in sorted_affected]
-    bar_losses = [(1.0 - ratio) * 100 for _, ratio in sorted_affected]
-    bar_colors = [_crash_color(min((1.0 - affected[t]) * 2.5, 1.0)) for t in bar_tickers]
+    max_loss, _ = _add_crash_bar_chart(fig, affected)
+    _reset_market_state(network, original_caps)
 
-    bar_text = [f'{loss:.1f}%' for loss in bar_losses]
-    fig.add_trace(go.Bar(
-        x=bar_losses, y=bar_tickers, orientation='h',
-        marker=dict(color=bar_colors), text=bar_text, textposition='outside',
-        showlegend=False
-    ), row=1, col=2)
-
-    # Reset market state
-    for t in network.companies:
-        network.companies[t].crashed = False
-        network.companies[t].crash_percentage = 0.0
-        network.companies[t].market_cap = original_caps[t]
-
-    company_name = network.companies[crash_ticker].name
-    _style_figure(fig, f'{crash_ticker} ({company_name}) — {int(crash_pct * 100)}% Crash')
-    max_loss = max(bar_losses) if bar_losses else 100
+    _style_figure(fig, f'{crash_ticker} ({network.companies[crash_ticker].name}) — {int(crash_pct * 100)}% Crash')
     fig.update_xaxes(range=[0, max_loss * 1.5], row=1, col=2)
 
     return fig, len(affected), total_loss
@@ -260,7 +274,7 @@ def run_visualization(json_file: str, strength_value: float = 0.7) -> None:
         State('ticker-input', 'value'),
         State('crash-input', 'value'),
     )
-    def update_graph(sim_clicks: int, reset_clicks: int,
+    def update_graph(_sim_clicks: int, _reset_clicks: int,
                      ticker_val: str | None, crash_val: float | None) -> tuple:
         """Update the graph based on user inputs."""
         triggered = ctx.triggered_id
@@ -282,7 +296,7 @@ def run_visualization(json_file: str, strength_value: float = 0.7) -> None:
             return no_update, 'Crash % must be 1-100.', no_update, no_update
 
         fig, affected_count, total_loss = _build_crash_figure(
-            network, graph_nx, pos, ticker, crash_val / 100.0, original_caps
+            network, graph_nx, pos, (ticker, crash_val / 100.0), original_caps
         )
         stats = f'Companies affected: {affected_count} | Total loss: {_format_money(total_loss)}'
 
