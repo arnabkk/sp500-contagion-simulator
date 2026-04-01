@@ -135,12 +135,12 @@ def _build_crash_node_data(network: MarketNetwork,
             total_loss += dollar_loss
             colors.append(_crash_color(min(loss_pct * 2.5, 1.0)))
             sizes.append(max(_scale_market_cap(original_caps[tk]), 8))
-            hovers.append(f"<b>{tk}</b><br>{company.name}<br>Loss: {loss_pct:.1%} "
+            hovers.append(f"<b>{tk}</b><br>{company.info.name}<br>Loss: {loss_pct:.1%} "
                           f"({_format_money(dollar_loss)})")
         else:
             colors.append(STABLE_COLOUR)
             sizes.append(_scale_market_cap(company.market_cap))
-            hovers.append(f"<b>{tk}</b><br>{company.name}<br>Stable")
+            hovers.append(f"<b>{tk}</b><br>{company.info.name}<br>Stable")
     return colors, sizes, hovers, total_loss
 
 
@@ -296,11 +296,11 @@ def run_visualization(json_file: str, strength_value: float = 0.7) -> None:
                    'borderRadius': '5px', 'backgroundColor': '#f9f9f9',
                    'maxWidth': '400px'},
             children=[
-                html.H3(f'{company.name} ({ticker})', style={'margin': '0 0 5px 0'}),
-                html.P(f'Sector: {company.sector}'),
-                html.P(f'Sub-Industry: {company.sub_industry}'),
-                html.P(f'Headquarters: {company.hq_location}'),
-                html.P(f'Founded: {company.founded}'),
+                html.H3(f'{company.info.name} ({ticker})', style={'margin': '0 0 5px 0'}),
+                html.P(f'Sector: {company.info.sector}'),
+                html.P(f'Sub-Industry: {company.info.sub_industry}'),
+                html.P(f'Headquarters: {company.info.hq_location}'),
+                html.P(f'Founded: {company.info.founded}'),
                 html.P(f'Market Cap: {_format_money(original_caps[ticker])}'),
             ]
         )

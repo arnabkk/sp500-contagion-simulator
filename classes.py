@@ -4,9 +4,28 @@ how a crash in one company propagates through its neighbors through correlated e
 """
 from __future__ import annotations
 import json
+from dataclasses import dataclass
 from typing import Any
 import numpy as np
 import networkx as nx
+
+
+@dataclass
+class CompanyInfo:
+    """Static metadata for a company.
+
+    Instance Attributes:
+        - name: The full legal name of the company.
+        - sector: The GICS Sector classification (i.e., "Industrials").
+        - sub_industry: The GICS Sub-Industry classification (e.g., "Industrial Conglomerates").
+        - hq_location: The headquarters location of the company (e.g., "Cupertino, California").
+        - founded: The year the company was founded.
+    """
+    name: str
+    sector: str
+    sub_industry: str
+    hq_location: str
+    founded: str
 
 
 class Company:
@@ -14,14 +33,11 @@ class Company:
 
     Instance Attributes:
         - ticker: The unique stock ticker symbol (i.e., "AAPL").
-        - name: The full legal name of the company.
-        - sector: The GICS Sector classification (i.e., "Industrials").
-        - sub_industry: The GICS Sub-Industry classification (e.g., "Industrial Conglomerates").
-        - hq_location: The headquarters location of the company (e.g., "Cupertino, California").
-        - founded: The year the company was founded.
+        - info: Static metadata about the company (name, sector, sub_industry, hq_location, founded).
         - history: A mapping from dates "YYYY-MM-DD" to adjusted closing prices.
         - crashed: Boolean value for whether the company is crashed
         - crash_percentage: A float from 0.0 to 1.0 representing "by how much" the stock has crashed.
+        - market_cap: The market capitalization of the company.
         - neighbors: A mapping from neighboring Company objects to their edge weight \
                      (Pearson correlation coefficient r).
 
@@ -32,11 +48,7 @@ class Company:
         - all(0.0 <= self.neighbors[neighbor] <= 1.0 for neighbor in self.neighbors)
     """
     ticker: str
-    name: str
-    sector: str
-    sub_industry: str
-    hq_location: str
-    founded: str
+    info: CompanyInfo
     history: dict[str, float]
     crashed: bool
     crash_percentage: float
@@ -47,11 +59,13 @@ class Company:
         """Initialize a new company with the provided data excerpted from the S&P 500 JSON.
         """
         self.ticker = ticker
-        self.name = data.get("name")
-        self.sector = data.get("sector")
-        self.sub_industry = data.get("sub_industry")
-        self.hq_location = data.get("hq_location")
-        self.founded = data.get("founded")
+        self.info = CompanyInfo(
+            name=data.get("name"),
+            sector=data.get("sector"),
+            sub_industry=data.get("sub_industry"),
+            hq_location=data.get("hq_location"),
+            founded=data.get("founded")
+        )
         self.history = data.get("history", {})
         self.crashed = False
         self.crash_percentage = 0.0
@@ -140,8 +154,8 @@ class MarketNetwork:
         """
         g = nx.Graph()
         for ticker, company in self.companies.items():
-            g.add_node(ticker, sector=company.sector, market_cap=company.market_cap,
-                       name=company.name, sub_industry=company.sub_industry)
+            g.add_node(ticker, sector=company.info.sector, market_cap=company.market_cap,
+                       name=company.info.name, sub_industry=company.info.sub_industry)
         visited = set()
         for ticker, company in self.companies.items():
             for neighbor, weight in company.neighbors.items():
@@ -211,7 +225,8 @@ if __name__ == "__main__":
 
     import python_ta
     python_ta.check_all(config={
-        'extra-imports': ['__future__', 'typing', 'json', 'numpy', 'networkx'],
+        'extra-imports': ['__future__', 'typing', 'json', 'dataclasses', 'numpy', 'networkx'],
         'allowed-io': ['construct_market_network', 'generate_json'],
-        'max-line-length': 120
+        'max-line-length': 120,
+        'max-attributes': 11
     })
