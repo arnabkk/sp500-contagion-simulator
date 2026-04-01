@@ -1,5 +1,4 @@
-# from visualization import run_visualization
-from visualization1 import run_visualization
+from visualization import run_visualization
 
 if __name__ == '__main__':
     # Data file and correlation threshold

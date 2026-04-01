@@ -1,16 +1,5 @@
-"""CSC111 Winter 2026 Project 2: S&P 500 Market Crash Simulator (Visualization)
-
-Module Description
-==================
-
-This module provides an interactive Dash web app for visualizing the S&P 500
-market crash simulation. Users enter a ticker and crash percentage, and the app
-displays a network graph and bar chart of affected companies.
-
-Copyright and Usage Information
-===============================
-
-This file is Copyright (c) 2026 Arnab Karmokar, Brian Chang, Derek Sun, Johnny Li
+"""Provides an interactive Dash web app for visualizing the S&P 500 market crash simulation.
+Users enter a ticker and crash percentage, and the app displays a network graph and bar chart of affected companies.
 """
 from __future__ import annotations
 

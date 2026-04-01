@@ -1,7 +1,12 @@
+""" Defines the MarketNetwork and Company classes to model and simulate market contagion in the S&P 500.
+Includes functions to construct a graph from JSON data, calculate stock correlations, and simulate
+how a crash in one company propagates through its neighbors through correlated edges.
+"""
 from __future__ import annotations
 import json
 from typing import Any
 import numpy as np
+import networkx as nx
 
 
 class Company:
@@ -38,7 +43,7 @@ class Company:
     market_cap: float
     neighbors: dict[Company, float]
 
-    def __init__(self, ticker, data):
+    def __init__(self, ticker: str, data: Any) -> None:
         """Initialize a new company with the provided data excerpted from the S&P 500 JSON.
         """
         self.ticker = ticker
@@ -124,7 +129,7 @@ class MarketNetwork:
         for company in self.companies:
             post_crash_dict[company] = self.companies[company].market_cap
             if pre_crash_dict[company] != post_crash_dict[company]:
-                affected_dict[company] = post_crash_dict[company]/pre_crash_dict[company]
+                affected_dict[company] = post_crash_dict[company] / pre_crash_dict[company]
         return affected_dict
 
     def to_networkx(self) -> Any:
@@ -133,7 +138,6 @@ class MarketNetwork:
         Each node has attributes: 'sector', 'market_cap', 'name', 'sub_industry'.
         Each edge has a 'weight' attribute (Pearson correlation coefficient).
         """
-        import networkx as nx
         g = nx.Graph()
         for ticker, company in self.companies.items():
             g.add_node(ticker, sector=company.sector, market_cap=company.market_cap,
@@ -160,7 +164,7 @@ class MarketNetwork:
             self.companies[company].market_cap /= affected_dict[company]
 
 
-def construct_market_network(json_file: str, strength_value: float = 0.7) -> MarketNetwork:
+def construct_market_network(json_file: str, threshold: float = 0.7) -> MarketNetwork:
     """ Convert S&P 500 JSON data into a MarketNetwork graph.
 
     Preconditions:
@@ -184,39 +188,30 @@ def construct_market_network(json_file: str, strength_value: float = 0.7) -> Mar
             returns[ticker] = np.diff(np.log(np.array(prices)))
     for i in range(len(tickers)):
         for j in range(i + 1, len(tickers)):
-            ticker1, ticker2 = tickers[i], tickers[j]
-            if ticker1 in returns and ticker2 in returns:
-                return1, return2 = returns[ticker1], returns[ticker2]
-                length = min(len(return1), len(return2))
-                if length > 20:
-                    res = np.corrcoef(return1[:length], return2[:length])[0, 1]
-                    if res >= strength_value:
-                        network.add_edge(ticker1, ticker2, round(float(res), 4))
+            _add_correlation_edge(network, returns, tickers[i], tickers[j], threshold)
     return network
 
 
+def _add_correlation_edge(network: MarketNetwork, returns: dict,
+                          ticker1: str, ticker2: str, threshold: float) -> None:
+    """ Calculate correlation and add an edge if it meets the strength threshold.
+    """
+    if ticker1 in returns and ticker2 in returns:
+        return1, return2 = returns[ticker1], returns[ticker2]
+        length = min(len(return1), len(return2))
+        if length > 20:
+            res = np.corrcoef(return1[:length], return2[:length])[0, 1]
+            if res >= threshold:
+                network.add_edge(ticker1, ticker2, round(float(res), 4))
+
+
 if __name__ == "__main__":
-    DATA_FILE = "sp500_covid_data.json"
-    strength_value = 0.7
-    my_network = construct_market_network(DATA_FILE, strength_value)
-    total_companies = len(my_network.companies)
-    total_edges = sum(len(c.neighbors) for c in my_network.companies.values()) // 2
-    print("\n--- Graph Statistics ---")
-    print(f"Total Vertices (Companies): {total_companies}")
-    print(f"Total Edges (Correlations > {strength_value}): {total_edges}")
-    test_ticker = "AAPL"
-    if test_ticker in my_network.companies:
-        apple = my_network.companies[test_ticker]
-        print(f"\n--- Spot Check: {test_ticker} ({apple.name}) ---")
-        print(f"Sector: {apple.sector}")
-        print(f"Number of strongly correlated neighbors: {len(apple.neighbors)}")
-        top_neighbors = sorted(
-            apple.neighbors.items(),
-            key=lambda item: item[1],
-            reverse=True
-        )[:5]
-        print("Top 5 Neighbors:")
-        for neighbor_obj, weight in top_neighbors:
-            print(f"- {neighbor_obj.ticker}: {weight}")
-    else:
-        print(f"\nWarning: {test_ticker} not found in the dataset.")
+    import doctest
+    doctest.testmod()
+
+    import python_ta
+    python_ta.check_all(config={
+        'extra-imports': ['__future__', 'typing', 'json', 'numpy', 'networkx'],
+        'allowed-io': ['construct_market_network', 'generate_json'],
+        'max-line-length': 120
+    })

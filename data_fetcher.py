@@ -1,9 +1,12 @@
-import yfinance as yf
-import pandas as pd
+""" Fetches S&P 500 company metadata and historical stock price data from Wikipedia and yfinance, processes this
+it into a structured format and saves it as a JSON file.
+"""
 import json
 from datetime import datetime
 import urllib.request
 import time
+import yfinance as yf
+import pandas as pd
 
 # source: https://joetatusko.com/2024/05/07/getting-the-sp-500-from-wikipedia-with-python/
 
@@ -27,7 +30,7 @@ def get_sp500_stocks() -> dict:
 def generate_json(sp500_dict: dict, filename: str) -> None:
     """ Generate json file.
     """
-    tickers_hyphenated = [symbol.replace('.', '-') for symbol in sp500_dict.keys()]
+    tickers_hyphenated = [t.replace('.', '-') for t in sp500_dict.keys()]
     data = yf.download(
         tickers=tickers_hyphenated,
         start="2020-01-01",
@@ -39,7 +42,7 @@ def generate_json(sp500_dict: dict, filename: str) -> None:
     result = {
         "METADATA": {
             "Last Updated": datetime.now().strftime("%Y-%m-%d"),
-            "Description": "S&P 500 Historical Adj Prices over the Past 2 Years"
+            "Description": "S&P 500 Historical Adj Prices (2020-01-01 to 2020-08-18)"
         },
         "STOCKS": {}
     }
@@ -51,7 +54,6 @@ def generate_json(sp500_dict: dict, filename: str) -> None:
             if not info or "marketCap" not in info:
                 time.sleep(0.1)
                 info = yf.Ticker(ticker_hyphenated).info
-            market_cap = info.get("marketCap", 0.0)
             historical_data = data[ticker_hyphenated].dropna()
             historical_data_dict = {date.strftime("%Y-%m-%d"): round(float(price), 4)
                                     for date, price in historical_data.items()}
@@ -63,12 +65,22 @@ def generate_json(sp500_dict: dict, filename: str) -> None:
                 "hq_location": details.get('Headquarters Location'),
                 "founded": int(clean_year_founded),
                 "history": historical_data_dict,
-                "market_cap": round(float(market_cap), 2)
+                "market_cap": round(float(info.get("marketCap", 0.0)), 2)
             }
-    with open(filename, 'w') as f:
-        json.dump(result, f, indent=4)
+    with open(filename, 'w') as file:
+        json.dump(result, file, indent=4)
 
 
 if __name__ == "__main__":
     stocks_metadata = get_sp500_stocks()
     generate_json(stocks_metadata, "sp500_covid_data.json")
+
+    import doctest
+    doctest.testmod()
+
+    import python_ta
+    python_ta.check_all(config={
+        'extra-imports': ['yfinance', 'pandas', 'json', 'datetime', 'urllib.request', 'time'],
+        'allowed-io': ['get_sp500_stocks', 'generate_json'],
+        'max-line-length': 120
+    })
