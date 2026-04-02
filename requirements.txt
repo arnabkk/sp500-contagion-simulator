@@ -6,3 +6,5 @@ dash
 yfinance
 pandas
 python-ta
+lxml
+html5lib
