@@ -26,7 +26,7 @@ def get_sp500_stocks() -> dict:
 
 
 def generate_json(sp500_dict: dict, filename: str) -> None:
-    """ Generate json file.
+    """ Download historical stock data and company metadata for S&P 500 companies and save to a JSON file.
     """
     tickers_hyphenated = [t.replace('.', '-') for t in sp500_dict.keys()]
     data = yf.download(

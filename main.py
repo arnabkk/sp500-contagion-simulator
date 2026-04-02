@@ -1,7 +1,6 @@
 from visualization import run_visualization
 
 if __name__ == '__main__':
-    # Data file and correlation threshold
     DATA_FILE = 'sp500_covid_data.json'
     STRENGTH_THRESHOLD = 0.7
 

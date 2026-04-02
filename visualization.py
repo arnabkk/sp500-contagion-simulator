@@ -57,7 +57,6 @@ def _compute_layout(graph_nx: nx.Graph) -> dict[str, tuple[float, float]]:
     for u, v, data in graph_nx.edges(data=True):
         if data.get('weight', 0) > 0.85:
             layout_graph.add_edge(u, v, weight=data['weight'])
-
     return nx.spring_layout(
         layout_graph,
         k=3.5 / math.sqrt(len(layout_graph.nodes)),
@@ -98,7 +97,6 @@ def _build_baseline_figure(network: MarketNetwork,
     """Build the baseline figure with nodes colored by sector."""
     fig = make_subplots(rows=1, cols=2, column_widths=[0.6, 0.4], horizontal_spacing=0.1)
     fig.add_trace(_make_edge_trace(graph_nx, pos), row=1, col=1)
-
     tickers = list(pos.keys())
     colors, sizes, hovers = [], [], []
     for t in tickers:
@@ -107,13 +105,11 @@ def _build_baseline_figure(network: MarketNetwork,
         sizes.append(_scale_market_cap(c.market_cap))
         hovers.append(f"<b>{t}</b><br>{c.info.name}<br>Sector: {c.info.sector}<br>"
                       f"Market Cap: {_format_money(c.market_cap)}")
-
     fig.add_trace(go.Scatter(
         x=[pos[tk][0] for tk in tickers], y=[pos[tk][1] for tk in tickers],
         mode='markers', marker={'size': sizes, 'color': colors, 'opacity': 0.85},
         text=hovers, hovertemplate='%{text}<extra></extra>', showlegend=False
     ), row=1, col=1)
-
     fig.add_trace(go.Bar(x=[0], y=['Run a simulation'], orientation='h',
                          showlegend=False), row=1, col=2)
     _style_figure(fig, 'S&P 500 Network — Sector View')
@@ -145,7 +141,7 @@ def _build_crash_node_data(network: MarketNetwork,
 
 
 def _add_crash_bar_chart(fig: go.Figure, affected: dict[str, float]) -> tuple[float, list[float]]:
-    """Add a bar chart of top 15 most affected companies. Returns (max_loss, bar_losses)."""
+    """Add a bar chart of top 15 most affected companies. Return (max_loss, bar_losses)."""
     sorted_affected = sorted(affected.items(), key=lambda x: x[1])[:15]
     bar_tickers = [tk for tk, _ in sorted_affected]
     bar_losses = [(1.0 - ratio) * 100 for _, ratio in sorted_affected]
@@ -173,27 +169,22 @@ def _build_crash_figure(network: MarketNetwork,
                         pos: dict[str, tuple[float, float]],
                         crash_info: tuple[str, float],
                         original_caps: dict[str, float]) -> tuple[go.Figure, int, float]:
-    """Simulate a crash and build the figure. Returns (figure, affected_count, total_loss)."""
+    """Simulate a crash and build the figure. Return (figure, affected_count, total_loss)."""
     crash_ticker, crash_pct = crash_info
     fig = make_subplots(rows=1, cols=2, column_widths=[0.6, 0.4], horizontal_spacing=0.1)
     affected = network.simulate_crash(crash_ticker, crash_pct)
     fig.add_trace(_make_edge_trace(graph_nx, pos), row=1, col=1)
-
     tickers = list(pos.keys())
     colors, sizes, hovers, total_loss = _build_crash_node_data(network, tickers, affected, original_caps)
-
     fig.add_trace(go.Scatter(
         x=[pos[t][0] for t in tickers], y=[pos[t][1] for t in tickers],
         mode='markers', marker={'size': sizes, 'color': colors, 'opacity': 0.9},
         text=hovers, hovertemplate='%{text}<extra></extra>', showlegend=False
     ), row=1, col=1)
-
     max_loss, _ = _add_crash_bar_chart(fig, affected)
     _reset_market_state(network, original_caps)
-
     _style_figure(fig, f'{crash_ticker} ({network.companies[crash_ticker].info.name}) — {int(crash_pct * 100)}% Crash')
     fig.update_xaxes(range=[0, max_loss * 1.5], row=1, col=2)
-
     return fig, len(affected), total_loss
 
 
@@ -204,22 +195,16 @@ def run_visualization(json_file: str, strength_value: float = 0.7) -> None:
         - json_file is a valid path to the S&P 500 JSON data file
         - 0.0 <= strength_value <= 1.0
     """
-    print("Building market network...")
     network = construct_market_network(json_file, strength_value)
     print(f"Network built: {len(network.companies)} companies")
-
-    print("Computing graph layout...")
     graph_nx = network.to_networkx()
     pos = _compute_layout(graph_nx)
     original_caps = {t: c.market_cap for t, c in network.companies.items()}
-
     app = Dash(__name__, title='S&P 500 Crash Simulator')
-
     app.layout = html.Div(style={'fontFamily': 'Arial, sans-serif', 'padding': '20px'}, children=[
         html.H1('S&P 500 Market Crash Simulator'),
         html.P('Simulating financial contagion across the S&P 500 during COVID-19 (2020)'),
-
-        # Controls
+        # controls and buttons
         html.Div(style={'display': 'flex', 'gap': '10px', 'alignItems': 'flex-end',
                         'marginBottom': '10px'}, children=[
             html.Div([
@@ -240,14 +225,9 @@ def run_visualization(json_file: str, strength_value: float = 0.7) -> None:
                         style={'padding': '8px 20px', 'cursor': 'pointer'}),
             html.Span(id='error-msg', style={'color': 'red', 'fontWeight': 'bold'}),
         ]),
-
-        # Company info box (hidden until simulation runs)
+        # company info box (keep hidden until simulation runs)
         html.Div(id='company-info', style={'marginBottom': '10px'}),
-
-        # Stats line
         html.Div(id='stats-line', style={'marginBottom': '10px', 'fontSize': '14px'}),
-
-        # Graph
         dcc.Graph(id='crash-graph',
                   figure=_build_baseline_figure(network, graph_nx, pos),
                   config={'displaylogo': False}),
@@ -267,29 +247,22 @@ def run_visualization(json_file: str, strength_value: float = 0.7) -> None:
                      ticker_val: str | None, crash_val: float | None) -> tuple:
         """Update the graph based on user inputs."""
         triggered = ctx.triggered_id
-
         if triggered == 'reset-btn':
             return _build_baseline_figure(network, graph_nx, pos), '', '', ''
-
         if triggered != 'simulate-btn':
             return no_update, '', no_update, no_update
-
         if not ticker_val or not ticker_val.strip():
             return no_update, 'Enter a ticker symbol.', no_update, no_update
-
         ticker = ticker_val.strip().upper()
         if ticker not in network.companies:
             return no_update, f'"{ticker}" not found.', no_update, no_update
-
         if crash_val is None or crash_val < 1 or crash_val > 100:
             return no_update, 'Crash % must be 1-100.', no_update, no_update
-
         fig, affected_count, total_loss = _build_crash_figure(
             network, graph_nx, pos, (ticker, crash_val / 100.0), original_caps
         )
         stats = f'Companies affected: {affected_count} | Total loss: {_format_money(total_loss)}'
-
-        # Build company info card
+        # build company info card
         company = network.companies[ticker]
         info_card = html.Div(
             style={'padding': '10px', 'border': '1px solid #ccc',
@@ -305,15 +278,13 @@ def run_visualization(json_file: str, strength_value: float = 0.7) -> None:
             ]
         )
         return fig, '', stats, info_card
-
-    print("Starting server at http://127.0.0.1:8050 — press Ctrl+C to stop.")
+    print("Server at http://127.0.0.1:8050 - Ctrl + C to stop.")
     app.run(debug=False)
 
 
 if __name__ == '__main__':
     import doctest
     doctest.testmod()
-
     import python_ta
     python_ta.check_all(config={
         'extra-imports': ['math', 'networkx', 'plotly.graph_objs',
