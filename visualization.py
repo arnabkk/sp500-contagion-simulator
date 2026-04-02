@@ -103,9 +103,9 @@ def _build_baseline_figure(network: MarketNetwork,
     colors, sizes, hovers = [], [], []
     for t in tickers:
         c = network.companies[t]
-        colors.append(SECTOR_COLOURS.get(c.sector, '#999'))
+        colors.append(SECTOR_COLOURS.get(c.info.sector, '#999'))
         sizes.append(_scale_market_cap(c.market_cap))
-        hovers.append(f"<b>{t}</b><br>{c.name}<br>Sector: {c.sector}<br>"
+        hovers.append(f"<b>{t}</b><br>{c.info.name}<br>Sector: {c.info.sector}<br>"
                       f"Market Cap: {_format_money(c.market_cap)}")
 
     fig.add_trace(go.Scatter(
@@ -191,7 +191,7 @@ def _build_crash_figure(network: MarketNetwork,
     max_loss, _ = _add_crash_bar_chart(fig, affected)
     _reset_market_state(network, original_caps)
 
-    _style_figure(fig, f'{crash_ticker} ({network.companies[crash_ticker].name}) — {int(crash_pct * 100)}% Crash')
+    _style_figure(fig, f'{crash_ticker} ({network.companies[crash_ticker].info.name}) — {int(crash_pct * 100)}% Crash')
     fig.update_xaxes(range=[0, max_loss * 1.5], row=1, col=2)
 
     return fig, len(affected), total_loss
