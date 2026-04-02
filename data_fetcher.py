@@ -8,8 +8,6 @@ import time
 import yfinance as yf
 import pandas as pd
 
-# source: https://joetatusko.com/2024/05/07/getting-the-sp-500-from-wikipedia-with-python/
-
 
 def get_sp500_stocks() -> dict:
     """ Convert S&P 500 stocks information from Wikipedia page to DataFrame.
@@ -72,8 +70,9 @@ def generate_json(sp500_dict: dict, filename: str) -> None:
 
 
 if __name__ == "__main__":
-    stocks_metadata = get_sp500_stocks()
-    generate_json(stocks_metadata, "sp500_covid_data.json")
+    # stocks_metadata = get_sp500_stocks()
+    # generate_json(stocks_metadata, "sp500_covid_data.json")
+    # Note: Above Code does not need to run, because the data is already stored in sp500_covid_data.json
 
     import doctest
     doctest.testmod()
