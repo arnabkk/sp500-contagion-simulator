@@ -27,6 +27,14 @@ class CompanyInfo:
     hq_location: str
     founded: str
 
+    def __init__(self, name: str, sector: str, sub_industry: str, hq_location: str, founded: str) -> None:
+        """Initialize static metadata for a company."""
+        self.name = name
+        self.sector = sector
+        self.sub_industry = sub_industry
+        self.hq_location = hq_location
+        self.founded = founded
+
 
 class Company:
     """ A vertex representing a company in the S&P 500 network.
