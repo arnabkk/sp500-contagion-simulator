@@ -11,7 +11,6 @@ from dash import Dash, html, dcc, Input, Output, State, no_update, ctx
 
 from classes import MarketNetwork, construct_market_network
 
-# Sector colors
 SECTOR_COLOURS = {
     'Information Technology': '#4C78A8', 'Health Care': '#54A24B',
     'Financials': '#E45756', 'Consumer Discretionary': '#F58518',
