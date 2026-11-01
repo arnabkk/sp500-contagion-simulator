@@ -8,3 +8,4 @@ pandas
 python-ta
 lxml
 html5lib
+gunicorn

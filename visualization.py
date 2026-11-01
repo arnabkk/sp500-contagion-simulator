@@ -187,8 +187,8 @@ def _build_crash_figure(network: MarketNetwork,
     return fig, len(affected), total_loss
 
 
-def run_visualization(json_file: str, strength_value: float = 0.7) -> None:
-    """Build the market network and launch the Dash app at http://127.0.0.1:8050.
+def create_app(json_file: str, strength_value: float = 0.7) -> Dash:
+    """Build the market network and return the configured Dash app.
 
     Preconditions:
         - json_file is a valid path to the S&P 500 JSON data file
@@ -277,6 +277,18 @@ def run_visualization(json_file: str, strength_value: float = 0.7) -> None:
             ]
         )
         return fig, '', stats, info_card
+
+    return app
+
+
+def run_visualization(json_file: str, strength_value: float = 0.7) -> None:
+    """Build the market network and launch the Dash app at http://127.0.0.1:8050.
+
+    Preconditions:
+        - json_file is a valid path to the S&P 500 JSON data file
+        - 0.0 <= strength_value <= 1.0
+    """
+    app = create_app(json_file, strength_value)
     print("Server at http://127.0.0.1:8050 - Ctrl + C to stop.")
     app.run(debug=False)
 
