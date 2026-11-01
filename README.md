@@ -1,104 +1,66 @@
-# S&P 500 Market Crash Simulator
+# S&P 500 Contagion Simulator
 
-**Simulating financial contagion across the S&P 500 using an object-oriented graph model.**
+**Crash one company and watch the shock spread through the S&P 500.**
 
-> CSC111 Final Project -- University of Toronto, Winter 2026
-> Arnab Karmokar, Brian Chang, Derek Sun, Johnny Li
+**[▶ Live demo](https://sp500-contagion-simulator.onrender.com)** (free hosting, so the first load can take about a minute)
 
-## Overview
+![Dashboard after a simulated 50% crash of Apple](docs/demo.png)
 
-When a major company crashes, the effects rarely stay contained. Shared supply chains, sector dependencies, and investor sentiment can trigger a domino effect of losses across the entire market -- a phenomenon known as **financial contagion**.
+When a major company crashes, the damage rarely stays contained. This project models the S&P 500 as a weighted graph: 503 companies, linked wherever their stock prices moved together during the COVID-19 crash in 2020. Pick a company and a crash size, and the simulator traces how the loss travels through those links and which companies take the biggest hit.
 
-This project models the S&P 500 as a **weighted graph** where each node represents a company and each edge reflects a correlation in historical price movements during the COVID-19 market downturn (January--August 2020). Users can select any company to initiate a simulated crash and observe in real time how the shock propagates through the network.
+*Example:* a 50% crash of Apple reaches **424 of 503 companies** and wipes out about **$3.0T** in simulated market value.
 
-**Research Question:** If one company crashes, how does the shock propagate through the S&P 500 network, and which companies are most vulnerable?
+## How it works
 
-## Features
+**1. Build the network.** Daily adjusted closing prices (Jan 2 to Aug 18, 2020) are turned into log-returns. Two companies are connected if the Pearson correlation of their returns is **r ≥ 0.7**, with the correlation as the edge weight. That gives 503 nodes and about 24,900 edges.
 
-- **Real market data** pulled via `yfinance`, covering the 2020 COVID-19 crash period
-- **Deterministic contagion model** where crash impact propagates recursively through correlated companies
-- **Interactive web dashboard** built with Dash and Plotly featuring:
-  - Crash simulation with user-defined ticker and crash severity
-  - Network graph with 503 companies and ~24,000 correlation edges
-  - Bar chart of the most affected companies showing both percentage and monetary loss
-  - Live stats (companies affected, total market loss, post-crash market cap)
-  - Company search with graph highlighting and detailed info card
-  - Clickable bar chart entries that auto-populate the search
+**2. Spread the shock.** The crashed company loses the chosen percentage of its market cap. Each neighbour is then hit by `crash % × correlation`, and the shock keeps spreading recursively until it falls below 1%. Each company is hit at most once.
 
-## How It Works
+**3. Show the result.**
+- Network graph: green = unaffected, red = hit (darker = worse), star = the company that crashed first.
+- Bar chart of the 15 hardest-hit companies.
+- Totals for companies affected and market value lost, plus an info card for the crashed company.
 
-### Graph Construction
-
-Each S&P 500 company is a `Company` vertex in a `MarketNetwork` graph. Edges are created between two companies if their **Pearson correlation coefficient satisfies r >= 0.7**, computed on log-returns of daily adjusted closing prices.
-
-Edges are weighted by correlation strength -- higher weight means stronger co-movement.
-
-### Contagion Simulation
-
-Starting from a user-selected company with a given crash percentage, the simulation performs a recursive graph traversal:
-
-1. The selected company's market cap is reduced by the crash percentage
-2. For each correlated neighbor, the crash impact is attenuated by the edge weight (crash % x correlation)
-3. If the attenuated impact exceeds 1%, the crash spreads to that neighbor
-4. The process continues recursively until the impact dissipates below the threshold
-
-### Visualization
-
-- **Green nodes** = stable companies
-- **Red nodes** = affected companies (darker red = more severe loss)
-- **Star marker** = the initially crashed company
-- A bar chart shows the top 15 most affected companies with both % loss and dollar loss
-- Company search highlights nodes on the graph and shows detailed company information
-
-## Tech Stack
-
-- **Python** (core language)
-- **yfinance** -- historical stock data retrieval
-- **NetworkX** -- graph construction and layout computation
-- **Plotly / Dash** -- interactive web-based visualization and dashboard
-- **NumPy** -- log-return and Pearson correlation computation
-
-## Data
-
-The project analyzes the COVID-19 crash period:
-
-| Crisis | Date Range |
-|---|---|
-| COVID-19 Crash | January 2020 -- August 2020 |
-
-Data includes 503 S&P 500 companies with ~158 trading days of adjusted closing prices, market capitalization, sector, sub-industry, and founding year.
-
-## Getting Started
+## Run it locally
 
 ```bash
-# Install dependencies
+git clone https://github.com/arnabkk/sp500-contagion-simulator.git
+cd sp500-contagion-simulator
+python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-
-# Run the simulation
 python main.py
 ```
 
-The app launches at `http://127.0.0.1:8050`. Open it in your browser.
+Open http://127.0.0.1:8050, enter a ticker (e.g. `AAPL`) and a crash percentage (e.g. `50`), then click **Simulate**. **Reset** returns to the baseline graph.
 
-**How to use:**
-1. Enter a ticker symbol (e.g. `AAPL`) and crash percentage (e.g. `50`)
-2. Click **Simulate Crash** to see contagion spread through the network
-3. Click any bar in the chart to view that company's details
-4. Use **Search Company** to find and highlight any company on the graph
-5. Click **Reset** to return to the baseline sector view
+## Project structure
 
-## Project Structure
-
-| File | Description |
+| File | What it does |
 |---|---|
-| `main.py` | Entry point -- builds network and launches dashboard |
-| `classes.py` | Core graph model (`Company`, `MarketNetwork`, crash simulation) |
-| `visualization.py` | Dash app, Plotly figures, and all UI components |
-| `data_fetcher.py` | Scrapes S&P 500 data from Wikipedia and yfinance |
-| `sp500_covid_data.json` | Pre-fetched dataset (503 companies, COVID-19 period) |
-| `requirements.txt` | Python dependencies |
+| `classes.py` | Graph model: `Company`, `MarketNetwork`, correlation edges, crash simulation |
+| `visualization.py` | Dash app and Plotly figures (`create_app` builds the app) |
+| `main.py` | Runs the app locally |
+| `app.py` | Production entry point for gunicorn (`gunicorn app:server`) |
+| `data_fetcher.py` | Builds the dataset from Wikipedia's S&P 500 list and yfinance |
+| `sp500_covid_data.json` | Pre-fetched dataset, so the app runs without any API calls |
+| `render.yaml` | Deployment config for Render |
 
-## References
+## Tech stack
+
+Python · NetworkX · NumPy · Plotly / Dash · yfinance · gunicorn · Render
+
+## Limitations
+
+- Correlation isn't causation. Two stocks moving together in 2020 doesn't mean one would drag the other down.
+- The spread is recursive and depth-first, and a company is only hit the first time the shock reaches it. That means a company's loss depends on which path reaches it first, not necessarily the strongest one.
+- Correlations come from 2020 prices, but market caps are from when the dataset was last fetched (April 2026). Dollar losses are illustrative.
+
+## Team
+
+Built as the final project for CSC111 (University of Toronto, Winter 2026) by Arnab Karmokar, Brian Chang, Derek Sun and Johnny Li. Forked from [Toros-25/S-P-500-Market-Crash-Simulator](https://github.com/Toros-25/S-P-500-Market-Crash-Simulator), with deployment added since.
+
+<details>
+<summary>References</summary>
 
 1. Kenton, W. "S&P 500 Index." *Investopedia*. [Link](https://www.investopedia.com/terms/s/sp500.asp)
 2. Gratton, P. "The Fall of the Market in the Fall of 2008." *Investopedia*. [Link](https://www.investopedia.com/articles/economics/09/subprime-market-2008.asp)
@@ -110,3 +72,5 @@ The app launches at `http://127.0.0.1:8050`. Open it in your browser.
 8. "Pearson Correlation Coefficient." *GeeksforGeeks*. [Link](https://www.geeksforgeeks.org/maths/pearson-correlation-coefficient/)
 9. "What Is NetworkX?" *NVIDIA Glossary*. [Link](https://www.nvidia.com/en-us/glossary/networkx/)
 10. Holtz, Y. "Plotly." *The Python Graph Gallery*. [Link](https://python-graph-gallery.com/plotly/)
+
+</details>
