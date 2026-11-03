@@ -57,7 +57,7 @@ Python · NetworkX · NumPy · Plotly / Dash · yfinance · gunicorn · Render
 
 ## Team
 
-Built as the final project for CSC111 (University of Toronto, Winter 2026) by Arnab Karmokar, Brian Chang, Derek Sun and Johnny Li. Forked from [Toros-25/S-P-500-Market-Crash-Simulator](https://github.com/Toros-25/S-P-500-Market-Crash-Simulator), with deployment added since.
+Built as the final project for University of Toronto course (Winter 2026) by Arnab Karmokar, Brian Chang, Derek Sun and Johnny Li. Forked from [Toros-25/S-P-500-Market-Crash-Simulator](https://github.com/Toros-25/S-P-500-Market-Crash-Simulator), with deployment added since.
 
 <details>
 <summary>References</summary>
